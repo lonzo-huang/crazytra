@@ -37,7 +37,15 @@ export default function Dashboard() {
   const ticks = useTradeStore(s => s.ticks)
   const tickHistory = useTradeStore(s => s.tickHistory)
   
-  const SYMBOLS = ['BTC-USDT', 'ETH-USDT', 'SOL-USDT', 'MATIC-USDT']
+  // 动态获取所有有数据的市场
+  const availableSymbols = useMemo(() => {
+    return Object.keys(ticks).sort()
+  }, [ticks])
+  
+  // 如果没有数据，显示默认市场
+  const SYMBOLS = availableSymbols.length > 0 
+    ? availableSymbols 
+    : ['BTC-USDT', 'ETH-USDT', 'SOL-USDT', 'MATIC-USDT']
 
   // 准备图表数据
   const chartData = useMemo(() => {
