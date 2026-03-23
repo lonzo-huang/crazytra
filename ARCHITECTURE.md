@@ -177,305 +177,375 @@ python main.py --mode backtest
 
 ---
 
-## 三、分层详细设计
+## 三、分层详细设计（Nautilus 整合后）
 
-### 3.1 第一层：数据获取层（Rust）
+### 3.1 Nautilus 核心层（Python + Rust）
 
 #### 3.1.1 职责定位
 
-系统的"神经末梢"，负责从各交易所获取实时市场数据，对延迟和稳定性要求最高。
+**Nautilus Trader** 是系统的核心交易引擎，整合了数据获取、策略执行、风控管理和订单执行。采用 Python API + Rust 核心的混合架构，兼顾开发效率和运行性能。
 
-#### 3.1.2 核心组件
+**关键特性**：
+- 🚀 **回测=实盘**：完全相同的策略代码用于回测和实盘
+- ⚡ **Rust 核心**：数据引擎用 Rust 实现，纳秒级延迟
+- 🔄 **事件驱动**：完整的事件溯源和重放能力
+- 📊 **专业级**：机构级交易引擎，经过充分测试
 
-```rust
-// 标准化数据结构
-pub struct Symbol {
-    pub exchange: String,      // 交易所标识
-    pub base: String,          // 基础资产
-    pub quote: String,         // 计价资产
-    pub kind: InstrumentKind,  // 资产类型
-}
+#### 3.1.2 Nautilus 核心组件
 
-pub enum InstrumentKind {
-    Spot,              // 现货
-    PerpetualFuture,   // 永续合约
-    PredictionMarket,  // 预测市场
-    Option { expiry: String, strike: String }, // 期权
-}
+**1. DataEngine（Rust 核心）**
+- 高性能数据处理引擎
+- WebSocket 连接管理
+- 订单簿维护和聚合
+- 数据标准化和验证
 
-pub struct NormalizedTick {
-    pub symbol: Symbol,
-    pub timestamp_ns: u64,     // 交易所时间戳
-    pub received_ns: u64,      // 本地接收时间
-    pub bid_price: Decimal,
-    pub bid_size: Decimal,
-    pub ask_price: Decimal,
-    pub ask_size: Decimal,
-    pub last_price: Decimal,
-    pub last_size: Decimal,
-    pub volume_24h: Decimal,
-    pub sequence: Option<u64>,
-}
+**2. StrategyEngine（Python）**
+- 策略生命周期管理
+- 事件路由和分发
+- 状态持久化和恢复
+- 热重载支持（通过 CrazytraStrategy）
+
+**3. RiskEngine**
+- 实时风控检查
+- 仓位限制管理
+- 保证金计算
+- 风险指标监控
+
+**4. ExecutionEngine**
+- 订单路由和执行
+- 订单状态机管理
+- 成交回报处理
+- 多交易所支持
+
+**5. Portfolio**
+- 账户状态管理
+- 持仓跟踪
+- PnL 计算
+- 绩效统计
+
+#### 3.1.3 自定义扩展组件
+
+**RedisBridgeActor** (`nautilus-core/actors/redis_bridge.py`)
+
+```python
+class RedisBridgeActor(Actor):
+    """Nautilus → Redis 桥接"""
+    
+    def on_quote_tick(self, tick: QuoteTick) -> None:
+        # 转换为 Crazytra JSON 格式
+        payload = {
+            "symbol": self._convert_symbol(tick.instrument_id),
+            "exchange": tick.instrument_id.venue.value.lower(),
+            "timestamp_ns": tick.ts_event,
+            "bid": str(tick.bid_price),  # 必须字符串
+            "ask": str(tick.ask_price),
+            # ...
+        }
+        # 异步发布到 Redis
+        asyncio.create_task(self._publish_to_redis(payload))
 ```
 
-#### 3.1.3 连接器架构
+**LLMWeightActor** (`nautilus-core/actors/llm_weight_actor.py`)
 
-采用**插件化连接器**设计，每个交易所独立实现：
-
-```rust
-#[async_trait]
-pub trait Connector: Send + Sync + 'static {
-    fn id(&self) -> &'static str;
+```python
+class LLMWeightActor(Actor):
+    """LLM 权重注入"""
     
-    // 订阅市场数据
-    async fn subscribe(
-        &self,
-        symbols: Vec<Symbol>,
-        tick_tx: mpsc::Sender<NormalizedTick>,
-    ) -> anyhow::Result<()>;
-    
-    // REST 快照查询（用于初始化或断线补偿）
-    async fn fetch_snapshot(&self, symbol: &Symbol) -> anyhow::Result<NormalizedTick>;
-    
-    // 取消订阅
-    async fn unsubscribe(&self, _symbols: &[Symbol]) -> anyhow::Result<()>;
-    
-    // 连接状态
-    fn state(&self) -> ConnectorState;
-}
+    async def _poll_loop(self) -> None:
+        # 消费 Redis llm.weight stream
+        entries = await self._redis.xreadgroup(
+            groupname="nautilus-llm-cg",
+            consumername=self._consumer_name,
+            streams={"llm.weight": ">"},
+        )
+        # 应用时间衰减融合
+        effective_score = self._apply_time_decay_fusion(...)
+        # 发布到策略
+        self._inject_to_strategies(symbol, effective_score)
 ```
 
-#### 3.1.4 已实现连接器
+**CrazytraStrategy** (`nautilus-core/strategies/base_strategy.py`)
 
-| 交易所 | 状态 | 技术方案 |
-|--------|------|----------|
-| **Binance** | ✅ 基础框架 | WebSocket 实时 + REST 快照 |
-| **Polymarket** | 🚧 框架定义 | The Graph (GraphQL) + CLOB API |
-| **Trading212** | ⏳ 待实现 | REST API |
-| **Tiger** | ⏳ 待实现 | WebSocket |
-
-#### 3.1.5 关键技术实现
-
-**1. WebSocket 断线重连**
-
-采用指数退避（exponential backoff）+ jitter，避免大量连接器同时重连导致交易所封禁。
-
-```rust
-pub struct ReconnectConfig {
-    pub max_attempts: u32,
-    pub base_delay_ms: u64,
-    pub max_delay_ms: u64,
-    pub jitter_percent: f64,  // 0.0 ~ 1.0
-}
-
-// 重连间隔: base_delay * 2^attempt + random_jitter
-// 例如: 100ms → 200ms → 400ms → 800ms ... 直到 max_delay
+```python
+class CrazytraStrategy(Strategy):
+    """扩展 Nautilus Strategy，支持 LLM"""
+    
+    def get_effective_llm_factor(self, symbol: str) -> float:
+        """获取 LLM 影响因子 [0.5, 2.0]"""
+        if not self.config.enable_llm:
+            return 1.0
+        
+        score, confidence, _ = self._llm_weights.get(symbol, (0.0, 0.0, {}))
+        # score ∈ [-1, 1] → factor ∈ [0.5, 2.0]
+        return 1.0 + score * confidence * self.config.llm_weight_factor
 ```
 
-**2. 环形缓冲区（无锁 SPSC）**
+#### 3.1.4 支持的交易所
 
-```rust
-pub struct RingBuffer<T> {
-    buffer: Vec<MaybeUninit<T>>,
-    head: AtomicUsize,  // 写入位置
-    tail: AtomicUsize,  // 读取位置
-    capacity: usize,
-}
+| 交易所 | Nautilus 支持 | 状态 | 说明 |
+|--------|--------------|------|------|
+| **Binance** | ✅ 原生支持 | 生产可用 | Spot + Futures |
+| **Polymarket** | 🚧 自定义适配器 | 开发中 | 需要自定义 DataClient |
+| **Interactive Brokers** | ✅ 原生支持 | 生产可用 | 通过 IB Gateway |
+| **Betfair** | ✅ 原生支持 | 生产可用 | 体育博彩 |
+
+**扩展 Polymarket 支持**：需要实现自定义 `DataClient` 和 `ExecutionClient`，详见 `TASK_PROMPTS.md`。
+
+#### 3.1.5 配置示例
+
+```python
+# nautilus-core/config.py
+from nautilus_trader.config import TradingNodeConfig
+
+config = TradingNodeConfig(
+    trader_id="CRAZYTRA-001",
+    log_level="INFO",
+    
+    # 数据客户端
+    data_clients={
+        "BINANCE": BinanceDataClientConfig(...),
+    },
+    
+    # 执行客户端
+    exec_clients={
+        "BINANCE": BinanceExecClientConfig(...),
+    },
+    
+    # 策略
+    strategies=[
+        MACrossLLMStrategyConfig(
+            instrument_id="BTCUSDT.BINANCE",
+            fast_period=10,
+            slow_period=20,
+            enable_llm=True,
+        ),
+    ],
+    
+    # 自定义 Actors
+    actors=[
+        RedisBridgeActorConfig(...),
+        LLMWeightActorConfig(...),
+    ],
+)
 ```
 
-- 单生产者单消费者无锁队列
-- 适用于 Connector → 消息总线 的数据传递
-- 避免 GC 停顿和锁竞争
+### 3.2 Redis Streams 桥接层
 
-**3. 标准化处理**
+#### 3.2.1 职责定位（Nautilus 整合后）
 
-所有交易所原始数据转换为统一的 `NormalizedTick` 格式：
-- 价格精度统一为 Decimal
-- 时间戳统一为纳秒级 UTC
-- 买卖方向标准化（bid = 买价, ask = 卖价）
+**重要变化**：Redis Streams 不再是主要的消息总线，而是作为 **Nautilus 与外部系统的桥接层**。
 
-### 3.2 第二层：消息总线
+- **Nautilus 内部**：使用自己的 MessageBus（高性能事件系统）
+- **外部系统**：LLM 层、API 网关、前端通过 Redis Streams 通信
+- **桥接组件**：RedisBridgeActor 和 LLMWeightActor
 
-#### 3.2.1 职责定位
+#### 3.2.2 Redis Streams 用途
 
-各层之间的"神经系统"，实现完全解耦。充当数据传递和事件通知的中枢。
-
-#### 3.2.2 技术选型对比
-
-| 特性 | Redis Streams | Kafka |
-|------|----------------|-------|
-| 延迟 | < 1ms | 5-20ms |
-| 吞吐量 | 中等 | 极高 |
-| 持久化 | 可选（RDB/AOF） | 原生支持 |
-| 日志重放 | 有限 | 完整支持 |
-| 运维复杂度 | 低 | 高 |
-| 推荐场景 | 小规模/低延迟优先 | 大规模/审计需求 |
-
-**建议**：初期使用 Redis Streams，后期可迁移到 Kafka。
+| 用途 | 说明 | 生产者 | 消费者 |
+|------|------|--------|--------|
+| **Nautilus → 外部** | Tick、订单事件 | RedisBridgeActor | API 网关、前端 |
+| **外部 → Nautilus** | LLM 权重 | LLM 层 | LLMWeightActor |
+| **审计日志** | 所有事件持久化 | RedisBridgeActor | 审计系统 |
 
 #### 3.2.3 主题设计（Topic Schema）
 
 ```
+# Nautilus → Redis（由 RedisBridgeActor 发布）
 market.tick.{exchange}.{symbol}    # 实时行情
-strategy.signal.{strategy_id}       # 策略信号
-llm.weight.{symbol}                # LLM 权重
-risk.command                       # 风控指令
-order.event.{order_id}             # 订单事件
-trading.fill.{symbol}                # 成交回报
-system.heartbeat.{component}       # 健康检查
+order.event                        # 订单事件
+position.update                    # 持仓更新
+account.state                      # 账户状态
+
+# Redis → Nautilus（由 LLMWeightActor 消费）
+llm.weight                         # LLM 权重向量
+
+# 可选（如果保留自建组件）
+strategy.signal                    # 策略信号（已被 Nautilus 替代）
+risk.alert                         # 风控告警
 ```
 
-#### 3.2.4 数据流向
+#### 3.2.4 数据流向（Nautilus 整合后）
 
 ```
-┌──────────────┐    Redis Streams     ┌────────────────┐
-│   数据获取层   │ ─────────────────────>│    策略层       │
-│   (Rust)     │   market.tick.*       │   (Python)     │
-└──────────────┘                       └────────────────┘
-                                              │
-                                              ▼ Redis Streams
-                                       ┌────────────────┐
-                                       │    LLM 层       │
-                                       │   (Python)     │
-                                       │  llm.weight.*  │
-                                       └────────────────┘
-                                              │
-        ┌────────────────────────────────────┘
-        ▼ Redis Streams
-┌────────────────┐    Redis/Kafka     ┌────────────────┐
-│    风控层       │ <───────────────────│   策略信号合成   │
-│     (Go)       │   strategy.signal   │                │
-│  risk.command  │                      └────────────────┘
-└────────────────┘
-        │
-        ▼ 风控通过后
-┌────────────────┐    Redis/Kafka     ┌────────────────┐
-│    交易层       │ <───────────────────│   风控指令     │
-│     (Go)       │   order.command     │                │
-│ order.command  │                      └────────────────┘
-└────────────────┘
-        │
-        ▼ WebSocket/REST
-┌────────────────┐
-│    交易所       │
-│  API/区块链    │
-└────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                    Nautilus Trader                        │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐   │
+│  │ DataEngine   │→│ Strategy     │→│ RiskEngine   │   │
+│  │  (Rust)      │  │ (Python)     │  │              │   │
+│  └──────────────┘  └──────────────┘  └──────────────┘   │
+│         ↓                  ↑                  ↓          │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐   │
+│  │RedisBridge   │  │LLMWeightActor│  │ExecutionEngine│  │
+│  │Actor         │  │              │  │              │   │
+│  └──────┬───────┘  └──────▲───────┘  └──────┬───────┘   │
+└─────────┼──────────────────┼──────────────────┼──────────┘
+          ↓                  ↑                  ↓
+    ┌─────────────────────────────────────────────────┐
+    │           Redis Streams（桥接层）                │
+    │  market.tick.*  │  llm.weight  │  order.event   │
+    └─────────────────────────────────────────────────┘
+          ↓                  ↑                  ↓
+    ┌──────────┐      ┌──────────┐      ┌──────────┐
+    │ 前端     │      │ LLM 层   │      │API 网关  │
+    │ (React)  │      │(Python)  │      │  (Go)    │
+    └──────────┘      └──────────┘      └──────────┘
 ```
 
-### 3.3 第三层：策略层（Python）
+**关键点**：
+- Nautilus 内部通信不经过 Redis（性能优化）
+- Redis 仅用于与外部系统通信
+- 消息格式保持与 SYSTEM_SPEC.md 一致（兼容性）
 
-#### 3.3.1 职责定位
+### 3.3 策略层（Nautilus + CrazytraStrategy）
 
-系统中最迭代最频繁的部分，负责接收行情数据、执行策略逻辑、生成交易信号。
+#### 3.3.1 职责定位（Nautilus 整合后）
 
-#### 3.3.2 策略基类设计
+策略层现在基于 **Nautilus Strategy** 框架，同时扩展了 **CrazytraStrategy** 基类以支持 LLM 权重注入。
+
+**关键优势**：
+- ✅ **回测=实盘**：相同代码用于回测和实盘
+- ✅ **LLM 增强**：通过 `get_effective_llm_factor()` 调整仓位
+- ✅ **热重载**：通过 `export_state`/`import_state` 支持
+- ✅ **专业级**：Nautilus 的成熟策略框架
+
+#### 3.3.2 CrazytraStrategy 基类
 
 ```python
-class Strategy(ABC):
-    def __init__(self, config: StrategyConfig):
-        self.config = config
-        self.state: Dict[str, Any] = {}
+from nautilus_trader.trading.strategy import Strategy
+from decimal import Decimal
+
+class CrazytraStrategy(Strategy):
+    """扩展 Nautilus Strategy，添加 LLM 支持"""
+    
+    def __init__(self, config: CrazytraStrategyConfig):
+        super().__init__(config)
+        self._llm_weights: dict[str, tuple] = {}  # (score, confidence, metadata)
+    
+    def on_llm_weight_updated(
+        self, 
+        symbol: str, 
+        score: float, 
+        confidence: float,
+        metadata: dict
+    ) -> None:
+        """LLM 权重更新回调"""
+        self._llm_weights[symbol] = (score, confidence, metadata)
+        self.log.info(f"LLM weight updated: {symbol} score={score:.3f}")
+    
+    def get_effective_llm_factor(self, symbol: str) -> float:
+        """
+        获取 LLM 影响因子
+        
+        Returns:
+            float: [0.5, 2.0] 范围的因子
+            - 1.0 = 中性（无 LLM 或 score=0）
+            - < 1.0 = 看跌（减少多头仓位）
+            - > 1.0 = 看涨（增加多头仓位）
+        """
+        if not self.config.enable_llm:
+            return 1.0
+        
+        score, confidence, _ = self._llm_weights.get(symbol, (0.0, 0.0, {}))
+        # score ∈ [-1, 1], confidence ∈ [0, 1]
+        # factor = 1.0 + score * confidence * weight_factor
+        return 1.0 + score * confidence * self.config.llm_weight_factor
     
     @abstractmethod
-    def on_tick(self, tick: Tick) -> Optional[Signal]:
-        """每个 tick 到达时调用，返回信号或 None"""
+    def calculate_signal_strength(self, tick) -> float:
+        """子类实现：计算基础信号强度 [0, 1]"""
         pass
     
     @abstractmethod
-    def on_bar(self, bar: Bar) -> Optional[Signal]:
-        """K线闭合时调用（时间聚合）"""
+    def calculate_signal_direction(self, tick) -> str:
+        """子类实现：计算信号方向 'long'/'short'/'hold'"""
         pass
+```
+
+#### 3.3.3 示例策略：均线交叉 + LLM
+
+```python
+class MACrossLLMStrategy(CrazytraStrategy):
+    """均线交叉策略 + LLM 权重调整"""
     
-    def on_weight_update(self, weights: Dict[str, float]):
-        """LLM 权重更新时调用"""
-        pass
-```
-
-#### 3.3.3 信号合成器（Signal Combinator）
-
-实现"不同标的灵活组合策略"的核心组件：
-
-```python
-class SignalCombinator:
-    def __init__(self, mode: CombineMode = CombineMode.WEIGHTED_SUM):
-        self.mode = mode
-        self.strategies: Dict[str, StrategyWeight] = {}
-        self.llm_weights: Dict[str, float] = {}  # 来自 LLM 层
+    def on_start(self) -> None:
+        super().on_start()
+        self.fast_ma = SimpleMovingAverage(self.config.fast_period)
+        self.slow_ma = SimpleMovingAverage(self.config.slow_period)
+        self.subscribe_quote_ticks(self.instrument_id)
     
-    def combine(self, signals: List[Signal]) -> Optional[Signal]:
-        if self.mode == CombineMode.WEIGHTED_SUM:
-            return self._weighted_sum(signals)
-        elif self.mode == CombineMode.VOTE:
-            return self._majority_vote(signals)
-        elif self.mode == CombineMode.CONFIDENCE_THRESHOLD:
-            return self._confidence_filter(signals)
+    def on_quote_tick(self, tick: QuoteTick) -> None:
+        # 更新均线
+        mid_price = (tick.bid_price + tick.ask_price) / 2
+        self.fast_ma.update(mid_price)
+        self.slow_ma.update(mid_price)
+        
+        if not self.fast_ma.initialized or not self.slow_ma.initialized:
+            return
+        
+        # 计算基础信号
+        strength = self.calculate_signal_strength(tick)
+        direction = self.calculate_signal_direction(tick)
+        
+        # 获取 LLM 调整因子
+        symbol = self._convert_instrument_to_symbol(tick.instrument_id)
+        llm_factor = self.get_effective_llm_factor(symbol)
+        
+        # 调整仓位大小
+        base_size = self.config.trade_size
+        adjusted_size = float(base_size) * strength * llm_factor
+        
+        # 执行交易
+        if direction == "long" and adjusted_size > 0.001:
+            self._submit_market_order(OrderSide.BUY, adjusted_size)
+        elif direction == "short" and adjusted_size > 0.001:
+            self._submit_market_order(OrderSide.SELL, adjusted_size)
 ```
 
-**合成模式**：
+#### 3.3.4 回测引擎（Nautilus BacktestEngine）
 
-| 模式 | 说明 | 适用场景 |
-|------|------|----------|
-| **WEIGHTED_SUM** | 加权求和 | 多策略融合 |
-| **VOTE** | 多数表决 | 策略一致性 |
-| **CONFIDENCE_THRESHOLD** | 置信度过滤 | 高确定性情境 |
-
-**LLM 权重注入**：
-LLM 层提供的权重向量直接注入这里，影响最终信号强度：
-```python
-final_strength = base_signal.strength * llm_weight * strategy_weight
-```
-
-#### 3.3.4 热重载机制
-
-支持不停机更新策略参数甚至替换策略实现：
-
-```python
-import watchdog
-from importlib import reload
-
-class StrategyRunner:
-    def watch_strategy_files(self):
-        """监听策略文件变化，自动重载"""
-        observer = Observer()
-        observer.schedule(
-            StrategyReloadHandler(self), 
-            path="./strategies", 
-            recursive=True
-        )
-        observer.start()
-```
-
-#### 3.3.5 回测引擎
-
-使用相同的策略代码跑历史数据：
+Nautilus 提供专业级回测引擎，完全事件驱动：
 
 ```python
-class BacktestEngine:
-    def run(
-        self,
-        strategy: Strategy,
-        data: pd.DataFrame,  # 历史 OHLCV 数据
-        initial_cash: float = 100000.0,
-        commission: float = 0.001,  # 手续费
-        slippage: float = 0.0005,   # 滑点
-    ) -> BacktestResult:
-        """
-        关键：复现真实的成交逻辑
-        - 滑点：依据成交量占比动态计算
-        - 部分成交：订单簿深度有限时按比例成交
-        - 延迟：模拟撮合延迟（随机 1-50ms）
-        """
-        pass
+from nautilus_trader.backtest.engine import BacktestEngine
+from nautilus_trader.backtest.node import BacktestNode
+
+# 创建回测节点
+node = BacktestNode(config=backtest_config)
+
+# 添加数据
+node.add_data(
+    data_type=QuoteTick,
+    data=historical_ticks,  # Parquet 或 CSV
+)
+
+# 添加策略
+node.add_strategy(MACrossLLMStrategy(config))
+
+# 运行回测
+result = node.run()
+
+# 生成报告
+print(result.stats_pnls())
+print(result.stats_returns())
 ```
 
-**回测报告指标**：
-- 收益曲线 (Equity Curve)
-- 最大回撤 (Max Drawdown)
-- Sharpe 比率
-- 胜率 / 盈亏比
-- 年化收益率
+**回测特性**：
+- ✅ 完整的订单簿模拟
+- ✅ 真实的滑点和手续费
+- ✅ 部分成交支持
+- ✅ 延迟模拟
+- ✅ 与实盘完全相同的代码
 
-**推荐库**：Vectorbt / Backtrader / 自研事件驱动回测器
+#### 3.3.5 策略开发流程
+
+1. **继承 CrazytraStrategy**
+2. **实现抽象方法**：`calculate_signal_strength`, `calculate_signal_direction`
+3. **订阅数据**：`subscribe_quote_ticks` 或 `subscribe_bars`
+4. **使用 LLM 因子**：`get_effective_llm_factor()` 调整仓位
+5. **回测验证**：使用 BacktestEngine
+6. **部署实盘**：相同代码，切换 `--mode live`
+
+详见 `nautilus-core/strategies/ma_cross_llm.py` 完整示例。
 
 ### 3.4 第四层：LLM 层（Python）
 
