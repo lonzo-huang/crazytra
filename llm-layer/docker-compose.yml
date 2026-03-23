@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  # Ollama 本地 LLM 服务
+  ollama:
+    image: ollama/ollama:latest
+    container_name: crazytra-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    # 如果没有 GPU，注释掉上面的 deploy 部分
+
+  # LLM 层服务
+  llm-layer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: crazytra-llm-layer
+    depends_on:
+      - ollama
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_MODEL=mistral:7b-instruct-q4_K_M
+      - LLM_INTERVAL_S=300
+      - BREAKING_THRESHOLD=0.85
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - crazytra-network
+
+  # Redis (如果还没有运行)
+  redis:
+    image: redis:7-alpine
+    container_name: crazytra-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+    networks:
+      - crazytra-network
+
+volumes:
+  ollama_data:
+  redis_data:
+
+networks:
+  crazytra-network:
+    driver: bridge
