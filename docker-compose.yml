@@ -1,0 +1,202 @@
+version: '3.8'
+
+services:
+  # Redis - 消息总线和缓存
+  redis:
+    image: redis:7-alpine
+    container_name: crazytra-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 2gb --maxmemory-policy allkeys-lru
+    restart: unless-stopped
+    networks:
+      - crazytra-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # PostgreSQL + TimescaleDB - 时序数据库
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: crazytra-timescaledb
+    environment:
+      POSTGRES_USER: crazytra
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-crazytra_password}
+      POSTGRES_DB: crazytra
+    ports:
+      - "5432:5432"
+    volumes:
+      - timescaledb_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - crazytra-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crazytra"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # Ollama - 本地 LLM 服务
+  ollama:
+    image: ollama/ollama:latest
+    container_name: crazytra-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    networks:
+      - crazytra-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    # 如果没有 GPU，注释掉上面的 deploy 部分
+
+  # LLM 层 - 新闻分析和权重生成
+  llm-layer:
+    build:
+      context: ./llm-layer
+      dockerfile: Dockerfile
+    container_name: crazytra-llm-layer
+    depends_on:
+      - redis
+      - ollama
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-mistral:7b-instruct-q4_K_M}
+      - LLM_INTERVAL_S=${LLM_INTERVAL_S:-300}
+      - BREAKING_THRESHOLD=${BREAKING_THRESHOLD:-0.85}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - NEWSAPI_KEY=${NEWSAPI_KEY}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    restart: unless-stopped
+    networks:
+      - crazytra-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Nautilus 核心 - 策略引擎
+  nautilus-core:
+    build:
+      context: ./nautilus-core
+      dockerfile: Dockerfile
+    container_name: crazytra-nautilus-core
+    depends_on:
+      - redis
+      - timescaledb
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://crazytra:${POSTGRES_PASSWORD:-crazytra_password}@timescaledb:5432/crazytra
+      - TRADING_MODE=${TRADING_MODE:-paper}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - BINANCE_API_KEY=${BINANCE_API_KEY}
+      - BINANCE_API_SECRET=${BINANCE_API_SECRET}
+    volumes:
+      - ./nautilus-core/strategies:/app/strategies
+      - ./nautilus-core/config:/app/config
+      - nautilus_data:/app/data
+    restart: unless-stopped
+    networks:
+      - crazytra-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # API 网关 - REST API 和 WebSocket
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    container_name: crazytra-api-gateway
+    depends_on:
+      - redis
+      - timescaledb
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://crazytra:${POSTGRES_PASSWORD:-crazytra_password}@timescaledb:5432/crazytra
+      - PORT=8080
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - JWT_SECRET=${JWT_SECRET:-your_jwt_secret_here}
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    networks:
+      - crazytra-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # 前端 - React 应用
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=${VITE_API_URL:-http://localhost:8080}
+        - VITE_WS_URL=${VITE_WS_URL:-ws://localhost:8080/ws}
+    container_name: crazytra-frontend
+    depends_on:
+      - api-gateway
+    ports:
+      - "3000:80"
+    restart: unless-stopped
+    networks:
+      - crazytra-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Grafana - 监控和可视化
+  grafana:
+    image: grafana/grafana:latest
+    container_name: crazytra-grafana
+    depends_on:
+      - timescaledb
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_INSTALL_PLUGINS=redis-datasource
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    restart: unless-stopped
+    networks:
+      - crazytra-network
+
+volumes:
+  redis_data:
+  timescaledb_data:
+  ollama_data:
+  nautilus_data:
+  grafana_data:
+
+networks:
+  crazytra-network:
+    driver: bridge
