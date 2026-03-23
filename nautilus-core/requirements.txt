@@ -1,0 +1,19 @@
+# Nautilus Trader - 固定到 patch 版本
+nautilus_trader==1.204.0
+
+# Redis 客户端
+redis[asyncio]==5.0.1
+
+# 数据处理
+pandas==2.1.4
+pyarrow==14.0.1
+
+# 配置管理
+pydantic==2.5.3
+python-dotenv==1.0.0
+
+# 日志
+structlog==23.2.0
+
+# 异步工具
+aioredis==2.0.1

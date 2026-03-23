@@ -1,0 +1,4 @@
+# 测试验证脚本依赖
+rich==13.7.0
+pytest==7.4.3
+pytest-asyncio==0.21.1

@@ -1,0 +1,240 @@
+version: "3.9"
+
+services:
+
+  # ── 消息总线 ────────────────────────────────────────────
+  redis:
+    image: redis:7.2-alpine
+    container_name: trading-redis
+    command: >
+      redis-server
+      --maxmemory 2gb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --appendfsync everysec
+      --hz 100
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # ── 时序数据库 ──────────────────────────────────────────
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: trading-tsdb
+    environment:
+      POSTGRES_USER:     trader
+      POSTGRES_PASSWORD: trader
+      POSTGRES_DB:       trading
+    ports:
+      - "5432:5432"
+    volumes:
+      - tsdb-data:/var/lib/postgresql/data
+      - ./infra/scripts/init_db.sql:/docker-entrypoint-initdb.d/01_init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trader"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ── 本地 LLM ────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: trading-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    environment:
+      OLLAMA_KEEP_ALIVE: "10m"
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # ── 数据获取层（Rust）──────────────────────────────────
+  data-layer:
+    build:
+      context: ../data-layer
+      dockerfile: ../infra/docker/Dockerfile.rust
+    container_name: trading-data-layer
+    env_file: ../.env
+    environment:
+      REDIS_URL: redis://redis:6379
+      RUST_LOG:  info
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "50m", max-file: "3" }
+
+  # ── 策略层（Python）────────────────────────────────────
+  strategy-layer:
+    build:
+      context: ../strategy-layer
+      dockerfile: ../infra/docker/Dockerfile.python
+    container_name: trading-strategy
+    env_file: ../.env
+    environment:
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+      data-layer:
+        condition: service_started
+    restart: unless-stopped
+    volumes:
+      - ../strategy-layer/strategy_layer/strategies:/app/strategy_layer/strategies
+    logging:
+      driver: json-file
+      options: { max-size: "50m", max-file: "3" }
+
+  # ── LLM 层（Python）────────────────────────────────────
+  llm-layer:
+    build:
+      context: ../llm-layer
+      dockerfile: ../infra/docker/Dockerfile.python
+    container_name: trading-llm
+    env_file: ../.env
+    environment:
+      REDIS_URL:       redis://redis:6379
+      OLLAMA_BASE_URL: http://ollama:11434
+    depends_on:
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "50m", max-file: "3" }
+
+  # ── 风控层（Go）────────────────────────────────────────
+  risk-engine:
+    build:
+      context: ../risk-engine
+      dockerfile: ../infra/docker/Dockerfile.go
+    container_name: trading-risk
+    env_file: ../.env
+    environment:
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+      strategy-layer:
+        condition: service_started
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "50m", max-file: "3" }
+
+  # ── 交易层（Go）────────────────────────────────────────
+  trading-layer:
+    build:
+      context: ../trading-layer
+      dockerfile: ../infra/docker/Dockerfile.go
+    container_name: trading-exec
+    env_file: ../.env
+    environment:
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+      risk-engine:
+        condition: service_started
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "50m", max-file: "3" }
+
+  # ── API 网关（Go）──────────────────────────────────────
+  api-gateway:
+    build:
+      context: ../api-gateway
+      dockerfile: ../infra/docker/Dockerfile.go
+    container_name: trading-gateway
+    env_file: ../.env
+    environment:
+      REDIS_URL: redis://redis:6379
+      API_PORT:  8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "50m", max-file: "3" }
+
+  # ── 前端（开发模式）────────────────────────────────────
+  frontend:
+    image: node:20-alpine
+    container_name: trading-frontend
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host"
+    volumes:
+      - ../frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: http://localhost:8080
+      VITE_WS_URL:  ws://localhost:8080
+    depends_on:
+      - api-gateway
+    restart: unless-stopped
+
+  # ── 监控：Prometheus ────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: trading-prometheus
+    volumes:
+      - ./infra/config/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+    restart: unless-stopped
+
+  # ── 监控：Grafana ────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: trading-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED:  "true"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./infra/config/grafana/dashboards:/etc/grafana/provisioning/dashboards
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+  tsdb-data:
+  ollama-data:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  default:
+    name: trading-net
