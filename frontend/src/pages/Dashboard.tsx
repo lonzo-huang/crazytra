@@ -1,53 +1,9 @@
 import { useTradeStore } from '../store/tradeStore'
-import {
-  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer
-} from 'recharts'
-
-function TickerCard({ symbol }: { symbol: string }) {
-  const tick    = useTradeStore(s => s.ticks[symbol])
-  const history = useTradeStore(s => s.tickHistory[symbol] ?? [])
-
-  const chartData = history.slice(-60).map((t, i) => ({
-    i,
-    mid: ((parseFloat(t.bid) + parseFloat(t.ask)) / 2).toFixed(2),
-  }))
-
-  const mid  = tick ? ((parseFloat(tick.bid) + parseFloat(tick.ask)) / 2).toFixed(2) : '—'
-  const prev = history.length > 1 ? history[history.length - 2] : null
-  const prevMid = prev ? (parseFloat(prev.bid) + parseFloat(prev.ask)) / 2 : null
-  const currMid = tick ? (parseFloat(tick.bid) + parseFloat(tick.ask)) / 2 : null
-  const up = prevMid && currMid ? currMid >= prevMid : null
-
-  return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-      <div className="flex justify-between items-start mb-2">
-        <span className="text-xs text-gray-400 font-medium tracking-wider">{symbol}</span>
-        {tick && (
-          <span className="text-xs text-gray-500">{tick.latency_us}µs</span>
-        )}
-      </div>
-      <div className={`text-2xl font-semibold mb-1 ${
-        up === true ? 'text-green-400' : up === false ? 'text-red-400' : 'text-white'
-      }`}>
-        ${mid}
-      </div>
-      {tick && (
-        <div className="flex gap-4 text-xs text-gray-500 mb-3">
-          <span>bid {parseFloat(tick.bid).toFixed(2)}</span>
-          <span>ask {parseFloat(tick.ask).toFixed(2)}</span>
-        </div>
-      )}
-      <ResponsiveContainer width="100%" height={50}>
-        <LineChart data={chartData}>
-          <Line type="monotone" dataKey="mid" stroke="#6366f1"
-                dot={false} strokeWidth={1.5} />
-          <YAxis domain={['auto', 'auto']} hide />
-          <XAxis dataKey="i" hide />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  )
-}
+import { TickerCard } from '../components/TickerCard'
+import { PriceChart } from '../components/PriceChart'
+import { OrderBook } from '../components/OrderBook'
+import { useMarketTick } from '../hooks/useWebSocket'
+import { useMemo } from 'react'
 
 function SignalRow({ sig }: { sig: ReturnType<typeof useTradeStore>['signals'][0] }) {
   const dirColor = sig.direction === 'long'  ? 'text-green-400'
@@ -78,20 +34,94 @@ function SignalRow({ sig }: { sig: ReturnType<typeof useTradeStore>['signals'][0
 
 export default function Dashboard() {
   const signals = useTradeStore(s => s.signals)
-  const SYMBOLS = ['BTC-USDT', 'ETH-USDT']
+  const ticks = useTradeStore(s => s.ticks)
+  const tickHistory = useTradeStore(s => s.tickHistory)
+  
+  const SYMBOLS = ['BTC-USDT', 'ETH-USDT', 'SOL-USDT', 'MATIC-USDT']
+
+  // 准备图表数据
+  const chartData = useMemo(() => {
+    const history = tickHistory['BTC-USDT'] || []
+    return history.slice(-100).map(tick => ({
+      time: Math.floor(tick.timestamp_ns / 1_000_000_000) as any,
+      open: parseFloat(tick.last),
+      high: parseFloat(tick.last) * 1.001,
+      low: parseFloat(tick.last) * 0.999,
+      close: parseFloat(tick.last),
+    }))
+  }, [tickHistory])
+
+  // 准备订单簿数据
+  const orderBookData = useMemo(() => {
+    const tick = ticks['BTC-USDT']
+    if (!tick) return { bids: [], asks: [] }
+    
+    const midPrice = (parseFloat(tick.bid) + parseFloat(tick.ask)) / 2
+    const bids = Array.from({ length: 15 }, (_, i) => ({
+      price: (midPrice - i * 0.5).toFixed(2),
+      size: (Math.random() * 2).toFixed(4),
+    }))
+    const asks = Array.from({ length: 15 }, (_, i) => ({
+      price: (midPrice + i * 0.5).toFixed(2),
+      size: (Math.random() * 2).toFixed(4),
+    }))
+    
+    return { bids, asks }
+  }, [ticks])
 
   return (
     <div className="space-y-6">
       {/* Ticker cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        {SYMBOLS.map(sym => <TickerCard key={sym} symbol={sym} />)}
+        {SYMBOLS.map(symbol => {
+          const tick = ticks[symbol]
+          const history = tickHistory[symbol] || []
+          const priceHistory = history.slice(-60).map(t => ({
+            time: t.timestamp_ns,
+            price: (parseFloat(t.bid) + parseFloat(t.ask)) / 2,
+          }))
+          
+          return tick ? (
+            <TickerCard
+              key={symbol}
+              symbol={symbol}
+              bid={tick.bid}
+              ask={tick.ask}
+              last={tick.last}
+              latency_us={tick.latency_us}
+              history={priceHistory}
+            />
+          ) : (
+            <div key={symbol} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+              <div className="text-xs text-gray-400 font-medium tracking-wider mb-2">{symbol}</div>
+              <div className="text-gray-500 text-sm">等待数据...</div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* 主图表和订单簿 */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* K线图 */}
+        <div className="lg:col-span-2">
+          <PriceChart symbol="BTC-USDT" data={chartData} height={400} />
+        </div>
+        
+        {/* 订单簿 */}
+        <div>
+          <OrderBook 
+            symbol="BTC-USDT" 
+            bids={orderBookData.bids}
+            asks={orderBookData.asks}
+          />
+        </div>
       </div>
 
       {/* Signal feed */}
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-        <h2 className="text-sm font-medium text-gray-300 mb-3">Live signals</h2>
+        <h2 className="text-sm font-medium text-gray-300 mb-3">实时信号</h2>
         {signals.length === 0 ? (
-          <p className="text-gray-500 text-sm">Waiting for signals…</p>
+          <p className="text-gray-500 text-sm">等待信号...</p>
         ) : (
           <div className="max-h-80 overflow-y-auto">
             {signals.slice(0, 50).map(sig => (
