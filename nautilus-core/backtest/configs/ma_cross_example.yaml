@@ -1,0 +1,50 @@
+# MA Cross 策略回测配置示例
+
+# 回测时间范围
+backtest:
+  start: "2024-01-01T00:00:00Z"
+  end: "2024-01-31T23:59:59Z"
+  save_results: true
+
+# 日志配置
+logging:
+  level: INFO
+
+# 数据配置
+data:
+  catalog_path: "./backtest/data/catalog"
+  instruments:
+    - BTCUSDT.BINANCE
+
+# 策略配置
+strategies:
+  - strategy_path: "strategies.ma_cross_llm.MACrossLLMStrategy"
+    config:
+      instrument_id: "BTCUSDT.BINANCE"
+      fast_period: 10
+      slow_period: 30
+      trade_size: 0.01
+      enable_llm: false  # 回测时禁用 LLM
+      llm_weight_factor: 0.5
+      min_confidence: 0.3
+
+# 执行配置
+execution:
+  venue: BINANCE
+  oms_type: NETTING
+  account_type: MARGIN
+  base_currency: USDT
+  starting_balance: 10000.0
+
+# 风险配置
+risk:
+  max_order_size: 1.0
+  max_notional_per_order: 10000.0
+
+# 手续费配置（Binance 标准费率）
+fees:
+  maker_fee: 0.001  # 0.1%
+  taker_fee: 0.001  # 0.1%
+
+# 输出配置
+output_dir: "./backtest/results"
