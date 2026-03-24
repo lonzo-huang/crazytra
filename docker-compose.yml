@@ -198,10 +198,13 @@ services:
     container_name: crazytra-telegram-bot
     depends_on:
       - redis
+      - ollama
     environment:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
       - REDIS_URL=redis:6379
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-mistral:7b-instruct-q4_K_M}
       - TZ=Asia/Shanghai
     restart: unless-stopped
     networks:

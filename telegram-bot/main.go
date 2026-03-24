@@ -16,12 +16,13 @@ import (
 )
 
 type TelegramBot struct {
-	bot       *tgbotapi.BotAPI
-	redis     *redis.Client
-	logger    *zap.Logger
-	chatID    int64
-	ctx       context.Context
-	cancel    context.CancelFunc
+	bot        *tgbotapi.BotAPI
+	redis      *redis.Client
+	logger     *zap.Logger
+	chatID     int64
+	ctx        context.Context
+	cancel     context.CancelFunc
+	nlpHandler *NLPHandler
 }
 
 // 订单事件
@@ -69,7 +70,7 @@ type AccountState struct {
 	TimestampNs     int64           `json:"timestamp_ns"`
 }
 
-func NewTelegramBot(token string, chatID int64, redisAddr string) (*TelegramBot, error) {
+func NewTelegramBot(token string, chatID int64, redisAddr, ollamaURL, ollamaModel string) (*TelegramBot, error) {
 	// 创建 logger
 	logger, _ := zap.NewProduction()
 
@@ -95,13 +96,17 @@ func NewTelegramBot(token string, chatID int64, redisAddr string) (*TelegramBot,
 
 	ctx, cancel := context.WithCancel(context.Background())
 
+	// 创建 NLP 处理器
+	nlpHandler := NewNLPHandler(ollamaURL, ollamaModel, logger)
+
 	return &TelegramBot{
-		bot:    bot,
-		redis:  rdb,
-		logger: logger,
-		chatID: chatID,
-		ctx:    ctx,
-		cancel: cancel,
+		bot:        bot,
+		redis:      rdb,
+		logger:     logger,
+		chatID:     chatID,
+		ctx:        ctx,
+		cancel:     cancel,
+		nlpHandler: nlpHandler,
 	}, nil
 }
 
@@ -469,22 +474,83 @@ func (tb *TelegramBot) handleCommands() {
 			continue
 		}
 
-		if !update.Message.IsCommand() {
+		// 处理斜杠命令
+		if update.Message.IsCommand() {
+			switch update.Message.Command() {
+			case "start":
+				tb.sendMessage("👋 欢迎使用 Crazytra 交易机器人！\n\n" +
+					"你可以用自然语言和我对话，例如：\n" +
+					"• 查看我的账户状态\n" +
+					"• BTC现在多少钱\n" +
+					"• 平掉BTC的仓位\n" +
+					"• 暂停所有交易\n" +
+					"• 启用均线策略\n\n" +
+					"或使用命令：\n" +
+					"/status - 账户状态\n" +
+					"/positions - 持仓\n" +
+					"/report - 交易报告\n" +
+					"/help - 帮助")
+			case "status":
+				tb.sendAccountStatus()
+			case "positions":
+				tb.sendPositions()
+			case "report":
+				tb.sendDailyReport()
+			case "help":
+				tb.sendMessage("📖 <b>帮助信息</b>\n\n" +
+					"<b>自然语言命令示例：</b>\n" +
+					"• 查看账户状态\n" +
+					"• 查看持仓\n" +
+					"• BTC-USDT 现在多少钱？\n" +
+					"• 平掉 ETH 的仓位\n" +
+					"• 平掉所有仓位\n" +
+					"• 暂停交易\n" +
+					"• 恢复交易\n" +
+					"• 启用 ma_cross 策略\n" +
+					"• 禁用 momentum 策略\n" +
+					"• 查看盈亏\n" +
+					"• 查看最近的交易\n\n" +
+					"<b>快捷命令：</b>\n" +
+					"/status - 账户状态\n" +
+					"/positions - 当前持仓\n" +
+					"/report - 交易报告")
+			}
 			continue
 		}
 
-		switch update.Message.Command() {
-		case "start":
-			tb.sendMessage("👋 欢迎使用 Crazytra 交易机器人！\n\n可用命令：\n/status - 查看账户状态\n/positions - 查看持仓\n/report - 生成交易报告")
-		case "status":
-			tb.sendAccountStatus()
-		case "positions":
-			tb.sendPositions()
-		case "report":
-			tb.sendDailyReport()
-		case "help":
-			tb.sendMessage("📖 帮助信息\n\n/status - 账户状态\n/positions - 当前持仓\n/report - 交易报告")
+		// 处理自然语言消息
+		if update.Message.Text != "" {
+			tb.handleNaturalLanguage(update.Message.Text)
 		}
+	}
+}
+
+// 处理自然语言消息
+func (tb *TelegramBot) handleNaturalLanguage(text string) {
+	tb.logger.Info("Received natural language message", zap.String("text", text))
+
+	// 发送"正在处理"提示
+	tb.sendMessage("🤔 正在理解您的指令...")
+
+	// 使用 NLP 解析命令
+	intent, err := tb.nlpHandler.ParseCommand(tb.ctx, text)
+	if err != nil {
+		tb.logger.Error("Failed to parse command", zap.Error(err))
+		tb.sendMessage("❌ 抱歉，我无法理解这个命令。请重试或使用 /help 查看帮助。")
+		return
+	}
+
+	// 如果置信度太低，提示用户
+	if intent.Confidence < 0.6 {
+		tb.sendMessage(fmt.Sprintf("⚠️ 我不太确定您的意思（置信度: %.0f%%）\n\n%s",
+			intent.Confidence*100, intent.Response))
+		return
+	}
+
+	// 执行命令
+	if err := tb.executeNLPCommand(intent); err != nil {
+		tb.logger.Error("Failed to execute command", zap.Error(err))
+		tb.sendMessage("❌ 执行命令时出错，请稍后重试。")
 	}
 }
 
@@ -532,8 +598,18 @@ func main() {
 		redisAddr = "localhost:6379"
 	}
 
+	ollamaURL := os.Getenv("OLLAMA_BASE_URL")
+	if ollamaURL == "" {
+		ollamaURL = "http://localhost:11434"
+	}
+
+	ollamaModel := os.Getenv("OLLAMA_MODEL")
+	if ollamaModel == "" {
+		ollamaModel = "mistral:7b-instruct-q4_K_M"
+	}
+
 	// 创建 Telegram Bot
-	bot, err := NewTelegramBot(token, chatID, redisAddr)
+	bot, err := NewTelegramBot(token, chatID, redisAddr, ollamaURL, ollamaModel)
 	if err != nil {
 		fmt.Printf("Failed to create bot: %v\n", err)
 		os.Exit(1)
