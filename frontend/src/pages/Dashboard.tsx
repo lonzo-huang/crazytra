@@ -2,35 +2,8 @@ import { useTradeStore } from '../store/tradeStore'
 import { TickerCard } from '../components/TickerCard'
 import { PriceChart } from '../components/PriceChart'
 import { OrderBook } from '../components/OrderBook'
-import { useMarketTick } from '../hooks/useWebSocket'
+import { SignalPanel } from '../components/SignalPanel'
 import { useMemo } from 'react'
-
-function SignalRow({ sig }: { sig: ReturnType<typeof useTradeStore>['signals'][0] }) {
-  const dirColor = sig.direction === 'long'  ? 'text-green-400'
-                 : sig.direction === 'short' ? 'text-red-400'
-                 : sig.direction === 'exit'  ? 'text-yellow-400'
-                 : 'text-gray-400'
-  const ts = new Date(sig.timestamp_ns / 1_000_000).toLocaleTimeString()
-  return (
-    <div className="flex items-center gap-3 py-2 border-b border-gray-800 text-sm">
-      <span className="text-gray-500 text-xs w-20 shrink-0">{ts}</span>
-      <span className="text-gray-300 w-24 shrink-0">{sig.symbol}</span>
-      <span className={`${dirColor} w-12 shrink-0 font-medium uppercase text-xs`}>
-        {sig.direction}
-      </span>
-      <div className="flex-1 bg-gray-800 rounded-full h-1.5">
-        <div className="bg-indigo-500 h-1.5 rounded-full"
-             style={{ width: `${sig.strength * 100}%` }} />
-      </div>
-      <span className="text-gray-400 text-xs w-10 text-right">
-        {(sig.strength * 100).toFixed(0)}%
-      </span>
-      <span className="text-gray-500 text-xs hidden md:block truncate max-w-xs">
-        {sig.strategy_id}
-      </span>
-    </div>
-  )
-}
 
 export default function Dashboard() {
   const signals = useTradeStore(s => s.signals)
@@ -125,19 +98,8 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Signal feed */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-        <h2 className="text-sm font-medium text-gray-300 mb-3">实时信号</h2>
-        {signals.length === 0 ? (
-          <p className="text-gray-500 text-sm">等待信号...</p>
-        ) : (
-          <div className="max-h-80 overflow-y-auto">
-            {signals.slice(0, 50).map(sig => (
-              <SignalRow key={sig.signal_id} sig={sig} />
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Signal Panel - 包含过滤、统计和详情 */}
+      <SignalPanel signals={signals} />
     </div>
   )
 }
