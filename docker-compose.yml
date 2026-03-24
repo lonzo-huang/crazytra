@@ -190,6 +190,30 @@ services:
     networks:
       - crazytra-network
 
+  # Telegram Bot - 交易通知服务
+  telegram-bot:
+    build:
+      context: ./telegram-bot
+      dockerfile: Dockerfile
+    container_name: crazytra-telegram-bot
+    depends_on:
+      - redis
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      - REDIS_URL=redis:6379
+      - TZ=Asia/Shanghai
+    restart: unless-stopped
+    networks:
+      - crazytra-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    profiles:
+      - telegram  # 可选服务，使用 --profile telegram 启动
+
 volumes:
   redis_data:
   timescaledb_data:
