@@ -231,14 +231,32 @@ class CrazytraStrategy(Strategy):
 
 #### 3.1.4 支持的交易所
 
+**加密货币**：
 | 交易所 | Nautilus 支持 | 状态 | 说明 |
 |--------|--------------|------|------|
 | **Binance** | ✅ 原生支持 | 生产可用 | Spot + Futures |
-| **Polymarket** | 🚧 自定义适配器 | 开发中 | 需要自定义 DataClient |
-| **Interactive Brokers** | ✅ 原生支持 | 生产可用 | 通过 IB Gateway |
+
+**股票市场**：
+| 交易所 | Nautilus 支持 | 状态 | 说明 |
+|--------|--------------|------|------|
+| **Interactive Brokers** | ✅ 原生支持 | 生产可用 | 全球股票、期货、期权 |
+| **Alpaca** | ✅ 自定义适配器 | 已实现 | 美股、免费、零佣金 |
+| **Trading212** | 🚧 自定义适配器 | 开发中 | 欧美股票、零佣金 |
+| **Tiger Brokers** | 🚧 自定义适配器 | 计划中 | 美股、港股、A股 |
+| **Robinhood** | ⚠️ 非官方 API | 不推荐 | 无官方 API，有风险 |
+
+**其他市场**：
+| 交易所 | Nautilus 支持 | 状态 | 说明 |
+|--------|--------------|------|------|
+| **Polymarket** | 🚧 自定义适配器 | 开发中 | 预测市场 |
 | **Betfair** | ✅ 原生支持 | 生产可用 | 体育博彩 |
 
-**扩展 Polymarket 支持**：需要实现自定义 `DataClient` 和 `ExecutionClient`，详见 `TASK_PROMPTS.md`。
+**推荐组合**：
+- 🏆 **新手**: Alpaca（美股）+ Binance（加密货币）
+- 🏆 **专业**: Interactive Brokers（全球市场）
+- 🏆 **多市场**: Alpaca（美股）+ Trading212（欧股）+ Binance（加密货币）
+
+**详细文档**：`docs/STOCK_EXCHANGES_SUPPORT.md`
 
 #### 3.1.5 配置示例
 
