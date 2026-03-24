@@ -12,6 +12,9 @@
 - **风控管理**：实时风控、熔断器、仓位管理
 - **双模式交易**：纸面交易模拟 + 实盘执行
 - **现代化前端**：React + TypeScript + 实时图表
+- **多租户 SaaS**：支持云端部署，多租户隔离，订阅制商业模式
+- **自定义订阅**：租户可自由选择市场和策略，按需付费
+- **Telegram Bot**：自然语言交易控制，实时通知推送
 
 ### 1.2 技术选型原则
 
@@ -2782,6 +2785,322 @@ ws.onmessage = (event) => {
 - **Go**：使用 `gofmt` 和 `golangci-lint`
 - **Python**：遵循 PEP8，使用 `black` 格式化
 - **TypeScript**：启用严格模式
+
+---
+
+## 十二、多租户 SaaS 架构
+
+### 12.1 多租户部署模式
+
+Crazytra 支持两种部署模式：
+
+1. **单租户模式**（当前）：独立部署，适合个人或单一机构
+2. **多租户 SaaS 模式**（扩展）：云端部署，支持多个租户共享基础设施
+
+### 12.2 租户隔离方案
+
+#### 命名空间隔离（推荐）
+
+```
+Redis Key: tenant:{tenant_id}:market.tick.btcusdt
+Database: tenant_a.positions, tenant_b.positions
+Kafka Topic: tenant-a-signals, tenant-b-signals
+```
+
+**优点**：
+- ✅ 成本效益高
+- ✅ 资源利用率高
+- ✅ 易于管理
+- ✅ 快速扩展
+
+#### 数据库隔离
+
+```sql
+-- 每个租户独立 Schema
+CREATE SCHEMA tenant_abc123;
+CREATE SCHEMA tenant_xyz789;
+
+-- 或使用行级安全策略（RLS）
+ALTER TABLE positions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON positions
+    USING (tenant_id = current_setting('app.tenant_id')::UUID);
+```
+
+### 12.3 租户自定义订阅系统
+
+#### 市场订阅
+
+租户可以自由选择订阅的交易所和交易对：
+
+```go
+type TenantMarketSubscription struct {
+    TenantID     string
+    Exchange     string  // binance, polymarket, tiger
+    Symbol       string  // BTC-USDT, ETH-USDT
+    Status       string  // active, paused
+    Config       SubscriptionConfig
+}
+
+type SubscriptionConfig struct {
+    TickInterval     string  // realtime, 1s, 5s
+    DepthLevel       int     // 订单簿深度
+    HistoryDays      int     // 历史数据保留
+    EnableNotify     bool    // 价格告警
+}
+```
+
+**配额限制**：
+- Free Plan: 10 个交易对
+- Starter Plan: 50 个交易对
+- Professional Plan: 无限制
+
+#### 策略订阅
+
+租户可以从策略市场选择或创建自定义策略：
+
+**策略类型**：
+1. **公开策略**（免费）：社区贡献，开源代码
+2. **私有策略**：租户自创，不对外公开
+3. **高级策略**（付费）：专业开发，经过回测验证
+
+```go
+type TenantStrategySubscription struct {
+    TenantID        string
+    StrategyID      string
+    Parameters      map[string]interface{}  // 自定义参数
+    Symbols         []string                // 应用的交易对
+    MaxPositionSize decimal.Decimal
+}
+```
+
+### 12.4 定价模型
+
+| 计划 | 价格 | 市场订阅 | 策略订阅 | 功能 |
+|------|------|----------|----------|------|
+| **Free** | $0/月 | 10个 | 1个 | 基础功能 |
+| **Starter** | $29/月 | 50个 | 3个 | + Telegram |
+| **Professional** | $99/月 | 无限 | 10个 | + LLM + 回测 |
+| **Enterprise** | 定制 | 无限 | 无限 | + 独立部署 + SLA |
+
+### 12.5 云端部署架构
+
+```
+                    ┌─────────────────┐
+                    │  Load Balancer  │
+                    └────────┬────────┘
+                             │
+                    ┌────────▼────────┐
+                    │  API Gateway    │
+                    │  + Auth Service │
+                    └────────┬────────┘
+                             │
+        ┌────────────────────┼────────────────────┐
+        │                    │                    │
+   ┌────▼────┐         ┌────▼────┐         ┌────▼────┐
+   │ Tenant A│         │ Tenant B│         │ Tenant C│
+   │ Namespace│        │ Namespace│        │ Namespace│
+   └────┬────┘         └────┬────┘         └────┬────┘
+        │                    │                    │
+   ┌────▼─────────────────────▼────────────────────▼────┐
+   │           Shared Infrastructure                     │
+   │  Redis | TimescaleDB | Ollama | Kafka              │
+   └─────────────────────────────────────────────────────┘
+```
+
+**推荐云平台**：
+- AWS: ECS + RDS + ElastiCache + MSK
+- GCP: GKE + Cloud SQL + Memorystore + Pub/Sub
+- Azure: AKS + PostgreSQL + Redis + Event Hubs
+
+**成本估算**（100 租户）：
+- 计算资源: $200/月
+- 数据库: $150/月
+- 缓存: $80/月
+- 消息队列: $100/月
+- 总计: ~$600/月
+
+### 12.6 认证和授权
+
+#### JWT Token 结构
+
+```json
+{
+  "sub": "user_123456",
+  "tenant_id": "tenant_abc123",
+  "role": "admin",
+  "permissions": [
+    "trade.execute",
+    "strategy.manage",
+    "reports.view"
+  ],
+  "plan": "professional",
+  "exp": 1700000000
+}
+```
+
+#### 权限模型
+
+| 角色 | 创建租户 | 管理用户 | 执行交易 | 修改策略 |
+|------|----------|----------|----------|----------|
+| Super Admin | ✓ | ✓ | ✓ | ✓ |
+| Tenant Admin | ✗ | ✓ | ✓ | ✓ |
+| Trader | ✗ | ✗ | ✓ | ✓ |
+| Viewer | ✗ | ✗ | ✗ | ✗ |
+
+### 12.7 动态数据路由
+
+```go
+// 根据租户订阅动态路由数据
+func RouteMarketData(tick *MarketTick) {
+    // 查询订阅了这个市场的所有租户
+    subscriptions := getActiveSubscriptions(tick.Exchange, tick.Symbol)
+    
+    for _, sub := range subscriptions {
+        // 检查配额
+        if !checkQuota(sub.TenantID) {
+            continue
+        }
+        
+        // 发送到租户的 Redis Stream
+        key := fmt.Sprintf("tenant:%s:market.tick.%s.%s", 
+            sub.TenantID, tick.Exchange, tick.Symbol)
+        
+        redis.XAdd(ctx, &redis.XAddArgs{
+            Stream: key,
+            Values: tick.ToMap(),
+        })
+    }
+}
+```
+
+### 12.8 详细文档
+
+完整的多租户架构设计和订阅系统详见：
+- `docs/MULTI_TENANT_ARCHITECTURE.md` - 多租户 SaaS 架构设计
+- `docs/TENANT_SUBSCRIPTION_SYSTEM.md` - 租户自定义订阅系统
+
+---
+
+## 十三、Telegram Bot 集成
+
+### 13.1 功能概述
+
+Telegram Bot 提供三大核心功能：
+1. **实时通知**：订单成交、风险告警、持仓更新
+2. **交互命令**：查询账户、持仓、生成报告
+3. **自然语言控制**：用人类语言控制交易系统
+
+### 13.2 通知类型
+
+#### 订单通知
+
+```
+✅ 订单成交
+
+🟢 BTC-USDT BUY
+价格: $67,840.50
+数量: 0.1000
+成交: 0.1000
+订单ID: order_abc123
+```
+
+#### 风险告警
+
+```
+🚨 风险告警
+
+类型: DAILY_LOSS_LIMIT
+级别: CRITICAL
+消息: 日损失超过限制
+当前值: -5.2%
+阈值: -5.0%
+```
+
+#### 持仓更新
+
+```
+📈 持仓更新
+
+🟢 BTC-USDT LONG
+数量: 0.1000
+入场价: $67,500.00
+当前价: $67,840.50
+未实现盈亏: $34.05
+```
+
+### 13.3 自然语言命令
+
+支持用人类语言控制交易系统：
+
+```
+用户: "查看我的账户状态"
+Bot: 💼 账户状态 [显示详情]
+
+用户: "BTC 现在多少钱？"
+Bot: 💰 BTC-USDT 实时价格: $67,840.50
+
+用户: "平掉 ETH 的仓位"
+Bot: ✅ 已发送平仓指令：ETH-USDT
+
+用户: "暂停所有交易"
+Bot: ⏸️ 已暂停所有交易
+```
+
+**支持的命令类型**：
+- 查询类：账户状态、持仓、价格、盈亏
+- 交易控制：平仓、平掉所有、暂停/恢复交易
+- 策略控制：启用/禁用策略
+
+### 13.4 技术实现
+
+#### NLP 处理流程
+
+```
+用户消息
+    ↓
+Telegram Bot
+    ↓
+Ollama LLM（本地 AI）
+    ↓
+意图解析 + 参数提取
+    ↓
+执行命令
+    ↓
+返回结果
+```
+
+#### 命令执行
+
+```go
+// 通过 Redis Pub/Sub 发送命令
+command := map[string]interface{}{
+    "action":       "CLOSE_POSITION",
+    "symbol":       "BTC-USDT",
+    "timestamp_ns": time.Now().UnixNano(),
+    "source":       "telegram",
+}
+
+redis.Publish(ctx, "trading.command", jsonData)
+```
+
+### 13.5 配置
+
+```bash
+# Telegram Bot 配置
+TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz
+TELEGRAM_CHAT_ID=123456789
+TELEGRAM_ENABLE=true
+
+# Ollama（用于 NLP）
+OLLAMA_BASE_URL=http://ollama:11434
+OLLAMA_MODEL=mistral:7b-instruct-q4_K_M
+```
+
+### 13.6 详细文档
+
+- `telegram-bot/README.md` - Telegram Bot 完整文档
+- `telegram-bot/QUICKSTART.md` - 快速开始指南
+- `telegram-bot/NLP_GUIDE.md` - 自然语言命令指南
 
 ---
 
