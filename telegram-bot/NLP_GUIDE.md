@@ -369,7 +369,7 @@ OLLAMA_MODEL=mistral:7b-instruct-q4_K_M
 **检查**：
 ```bash
 # 查看日志
-docker logs crazytra-telegram-bot
+docker logs mirrorquant-telegram-bot
 
 # 检查 Ollama
 curl http://localhost:11434/api/tags
@@ -391,7 +391,7 @@ curl http://localhost:11434/api/tags
 **优化**：
 ```bash
 # 预加载模型
-docker exec -it crazytra-ollama ollama run mistral:7b-instruct-q4_K_M
+docker exec -it mirrorquant-ollama ollama run mistral:7b-instruct-q4_K_M
 ```
 
 ## 🎯 最佳实践

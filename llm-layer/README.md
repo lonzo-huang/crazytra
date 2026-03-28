@@ -26,7 +26,7 @@ Redis Stream (llm.weight)
     ↓ 消费
 Nautilus LLMWeightActor
     ↓ 注入
-CrazytraStrategy
+MirrorQuantStrategy
 ```
 
 ## 快速开始

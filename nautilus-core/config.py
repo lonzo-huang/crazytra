@@ -21,7 +21,7 @@ from nautilus_trader.model.identifiers import TraderId, Venue
 
 
 # 基础配置
-TRADER_ID = TraderId("CRAZYTRA-001")
+TRADER_ID = TraderId("MIRRORQUANT-001")
 REDIS_URL = "redis://localhost:6379"
 REDIS_DB = 0
 

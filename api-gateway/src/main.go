@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	"api-gateway/handlers"
+
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -231,6 +233,7 @@ func JWTMiddleware(secret string) gin.HandlerFunc {
 
 func setupRoutes(r *gin.Engine, rdb *redis.Client, hub *WSHub, secret string) {
 	auth := JWTMiddleware(secret)
+	h := handlers.NewHandler(rdb)
 
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok", "ts": time.Now().Unix()})
@@ -240,6 +243,17 @@ func setupRoutes(r *gin.Engine, rdb *redis.Client, hub *WSHub, secret string) {
 	r.GET("/ws", hub.ServeWS)
 
 	api := r.Group("/api/v1")
+	
+	// Polymarket endpoints (no auth for now - public data)
+	api.GET("/polymarket/markets", h.GetPolymarketMarkets)
+	api.GET("/polymarket/markets/:id", h.GetPolymarketMarket)
+	api.GET("/polymarket/stats", h.GetPolymarketStats)
+	api.GET("/polymarket/markets/btc", h.GetBTCMarkets)
+	api.GET("/polymarket/strategy/btc5m", h.GetBTCStrategy)
+	api.GET("/polymarket/strategy/stats", h.GetStrategyStats)
+	api.GET("/polymarket/orderbook/:asset", h.GetPolymarketOrderBook)
+	
+	// Protected endpoints
 	api.Use(auth)
 	{
 		// Strategies

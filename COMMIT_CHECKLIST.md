@@ -143,7 +143,7 @@ git commit -m "feat: Nautilus Trader 整合完成
 - 整合 Nautilus Trader 1.204.0 作为核心交易引擎
 - 实现 RedisBridgeActor 桥接 Nautilus 与 Redis
 - 实现 LLMWeightActor 支持 LLM 权重注入
-- 创建 CrazytraStrategy 基类支持 LLM 增强
+- 创建 MirrorQuantStrategy 基类支持 LLM 增强
 - 添加完整的测试验证系统
 - 更新所有文档
 "
@@ -153,7 +153,7 @@ git commit -m "feat: Nautilus Trader 整合完成
 
 ```bash
 # 在 GitHub 创建仓库后
-git remote add origin https://github.com/your-username/Crazytra.git
+git remote add origin https://github.com/your-username/MirrorQuant.git
 
 # 验证
 git remote -v
@@ -224,7 +224,7 @@ git remote -v
 git branch -a
 
 # 在 GitHub 上验证
-# 访问 https://github.com/your-username/Crazytra
+# 访问 https://github.com/your-username/MirrorQuant
 ```
 
 ## 🎯 下一步

@@ -1,4 +1,4 @@
-# Crazytra 前端
+# MirrorQuant 前端
 
 基于 React + TypeScript + Vite 的实时交易界面。
 

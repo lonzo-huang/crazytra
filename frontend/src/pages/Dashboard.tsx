@@ -3,6 +3,7 @@ import { TickerCard } from '../components/TickerCard'
 import { PriceChart } from '../components/PriceChart'
 import { OrderBook } from '../components/OrderBook'
 import { SignalPanel } from '../components/SignalPanel'
+import { PolymarketTradingPanel } from '../components/PolymarketTradingPanel'
 import { useMemo } from 'react'
 
 export default function Dashboard() {
@@ -81,7 +82,7 @@ export default function Dashboard() {
         })}
       </div>
 
-      {/* 主图表和订单簿 */}
+      {/* 主图表、订单簿和 Polymarket */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* K线图 */}
         <div className="lg:col-span-2">
@@ -95,6 +96,13 @@ export default function Dashboard() {
             bids={orderBookData.bids}
             asks={orderBookData.asks}
           />
+        </div>
+      </div>
+
+      {/* Polymarket 预测市场 */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-3">
+          <PolymarketTradingPanel />
         </div>
       </div>
 

@@ -37,7 +37,7 @@ export default function App() {
         {/* Top nav */}
         <nav className="h-12 bg-gray-900 border-b border-gray-800 flex items-center px-6 gap-8">
           <span className="font-semibold text-sm tracking-wide text-white">
-            AutoTrader
+            MirrorQuant
           </span>
           <div className="flex gap-6 flex-1">
             {NAV.map(n => (

@@ -1,0 +1,158 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MirrorQuant Market Tick Event",
+  "description": "MirrorQuant 标准化市场行情事件格式（跨交易所、跨语言、可扩展）",
+  "type": "object",
+  "required": ["type", "ts_event", "ts_exchange", "source", "payload"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "market_tick",
+      "description": "事件类型，固定为 market_tick"
+    },
+    "ts_event": {
+      "type": "integer",
+      "description": "MQ 接收到事件的时间戳（毫秒）",
+      "minimum": 0
+    },
+    "ts_exchange": {
+      "type": "integer",
+      "description": "交易所事件时间戳（毫秒）",
+      "minimum": 0
+    },
+    "source": {
+      "type": "string",
+      "description": "数据来源",
+      "enum": ["polymarket", "binance", "trading212", "tiger", "okx", "bybit"]
+    },
+    "payload": {
+      "type": "object",
+      "required": ["symbol", "market_id", "instrument_type", "exchange"],
+      "properties": {
+        "symbol": {
+          "type": "string",
+          "description": "MQ 内部统一符号格式，如 POLY:TRUMP_WIN",
+          "pattern": "^[A-Z]+:[A-Z0-9_]+$"
+        },
+        "market_id": {
+          "type": "string",
+          "description": "交易所原始市场 ID"
+        },
+        "instrument_type": {
+          "type": "string",
+          "description": "资产类型",
+          "enum": ["prediction", "spot", "future", "option", "swap"]
+        },
+        "exchange": {
+          "type": "string",
+          "description": "交易所名称"
+        },
+        "bid": {
+          "type": "number",
+          "description": "最优买价",
+          "minimum": 0
+        },
+        "ask": {
+          "type": "number",
+          "description": "最优卖价",
+          "minimum": 0
+        },
+        "mid": {
+          "type": "number",
+          "description": "中间价 (bid + ask) / 2",
+          "minimum": 0
+        },
+        "bid_size": {
+          "type": "number",
+          "description": "最优买量",
+          "minimum": 0
+        },
+        "ask_size": {
+          "type": "number",
+          "description": "最优卖量",
+          "minimum": 0
+        },
+        "last_price": {
+          "type": "number",
+          "description": "最新成交价",
+          "minimum": 0
+        },
+        "last_size": {
+          "type": "number",
+          "description": "最新成交量",
+          "minimum": 0
+        },
+        "last_side": {
+          "type": "string",
+          "description": "最新成交方向",
+          "enum": ["buy", "sell"]
+        },
+        "volume_24h": {
+          "type": "number",
+          "description": "24小时成交量",
+          "minimum": 0
+        },
+        "open_interest": {
+          "type": "number",
+          "description": "未平仓量（可选）",
+          "minimum": 0
+        },
+        "orderbook": {
+          "type": "object",
+          "description": "完整订单簿（可选）",
+          "properties": {
+            "bids": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["price", "size"],
+                "properties": {
+                  "price": { "type": "number", "minimum": 0 },
+                  "size": { "type": "number", "minimum": 0 }
+                }
+              }
+            },
+            "asks": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["price", "size"],
+                "properties": {
+                  "price": { "type": "number", "minimum": 0 },
+                  "size": { "type": "number", "minimum": 0 }
+                }
+              }
+            }
+          }
+        },
+        "polymarket": {
+          "type": "object",
+          "description": "Polymarket 专用扩展字段",
+          "properties": {
+            "outcome": {
+              "type": "string",
+              "description": "预测结果（YES/NO）",
+              "enum": ["YES", "NO"]
+            },
+            "liquidity": {
+              "type": "number",
+              "description": "流动性",
+              "minimum": 0
+            },
+            "probability": {
+              "type": "number",
+              "description": "隐含概率",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "market_type": {
+              "type": "string",
+              "description": "市场类型",
+              "enum": ["binary", "categorical"]
+            }
+          }
+        }
+      }
+    }
+  }
+}

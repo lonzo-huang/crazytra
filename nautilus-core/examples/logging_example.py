@@ -11,16 +11,16 @@ from nautilus_trader.model.enums import OrderSide
 from nautilus_trader.model.identifiers import InstrumentId
 
 from config.logging_config import get_logger
-from strategies.base_strategy import CrazytraStrategy, CrazytraStrategyConfig
+from strategies.base_strategy import MirrorQuantStrategy, MirrorQuantStrategyConfig
 
 
-class LoggingExampleConfig(CrazytraStrategyConfig):
+class LoggingExampleConfig(MirrorQuantStrategyConfig):
     """示例策略配置"""
     instrument_id: str
     threshold: Decimal = Decimal("0.5")
 
 
-class LoggingExampleStrategy(CrazytraStrategy):
+class LoggingExampleStrategy(MirrorQuantStrategy):
     """
     日志使用示例策略
     

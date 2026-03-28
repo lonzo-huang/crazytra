@@ -23,8 +23,8 @@ from nautilus_trader.model.data import QuoteTick, Bar
 from nautilus_trader.persistence.catalog import ParquetDataCatalog
 import pandas as pd
 
-class CrazytraBacktestEngine:
-    """Crazytra 回测引擎"""
+class MirrorQuantBacktestEngine:
+    """MirrorQuant 回测引擎"""
     
     def __init__(self, tenant_id: str):
         self.tenant_id = tenant_id

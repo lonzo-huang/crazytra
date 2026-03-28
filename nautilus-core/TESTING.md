@@ -12,7 +12,7 @@ redis-cli ping
 # 应返回: PONG
 
 # 如果未运行，启动 Redis
-docker run -d -p 6379:6379 --name crazytra-redis redis:alpine
+docker run -d -p 6379:6379 --name mirrorquant-redis redis:alpine
 ```
 
 ### 2. 安装测试依赖
@@ -91,7 +91,7 @@ python main.py --mode paper
 ============================================================
 Nautilus Trading Node Started
 ============================================================
-Trader ID: CRAZYTRA-001
+Trader ID: MIRRORQUANT-001
 Trading Mode: paper
 Redis URL: redis://localhost:6379
 ============================================================
@@ -281,9 +281,9 @@ Error: Cannot connect to Redis at redis://localhost:6379
 docker ps | grep redis
 
 # 2. 如果未运行，启动 Redis
-docker start crazytra-redis
+docker start mirrorquant-redis
 # 或
-docker run -d -p 6379:6379 --name crazytra-redis redis:alpine
+docker run -d -p 6379:6379 --name mirrorquant-redis redis:alpine
 
 # 3. 检查端口
 netstat -tuln | grep 6379  # Linux

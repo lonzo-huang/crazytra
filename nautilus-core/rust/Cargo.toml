@@ -1,0 +1,43 @@
+[package]
+name = "nautilus-core"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "nautilus_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+# PyO3 for Python bindings
+pyo3 = { version = "0.21", features = ["extension-module"] }
+
+# Async runtime
+tokio = { version = "1.0", features = ["full"] }
+tokio-tungstenite = "0.20"
+
+# HTTP client
+reqwest = { version = "0.11", features = ["json"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# UUID
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+# WebSockets
+futures-util = "0.3"
+
+# Cryptography (for signing)
+ethers = "2.0"

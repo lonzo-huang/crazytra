@@ -1,8 +1,8 @@
-# Crazytra - 统一自动交易系统架构文档
+# MirrorQuant - 统一自动交易系统架构文档
 
 ## 一、系统概述
 
-**Crazytra** 是一个全栈自动交易系统，支持多市场、多策略、LLM 情感增强的智能交易。系统采用分层微服务架构，每层使用最适合的编程语言实现，通过消息总线完全解耦。
+**MirrorQuant** 是一个全栈自动交易系统，支持多市场、多策略、LLM 情感增强的智能交易。系统采用分层微服务架构，每层使用最适合的编程语言实现，通过消息总线完全解耦。
 
 ### 1.1 核心特性
 
@@ -29,99 +29,205 @@
 
 ---
 
-## 二、系统架构总览
+## 二、专业级三层架构设计
 
-### 2.1 架构图
+### 2.1 架构总览
+
+**MirrorQuant** 采用专业级三层事件驱动架构，完全解耦平台层、事件层和执行层：
+
+- **MirrorQuant 平台层**: 策略、风控、执行、LLM、多租户、SaaS
+- **Redis Streams 事件层**: 完全解耦的事件总线
+- **NautilusTrader Runner**: 纯执行后端插件
+
+### 2.2 完整架构图
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                        外部市场数据源（可插拔扩展）                        │
-├─────────────────────────────────────────────────────────────────────────┤
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐ │
-│  │ Binance  │  │Polymarket│  │Trading212│  │  Tiger   │  │  +扩展   │ │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘ │
-│       │             │             │             │             │       │
-│       └─────────────┴─────────────┴─────────────┴─────────────┘       │
-└──────────────────────┼────────────────────────────────────────────────┘
-                       ▼ WebSocket / REST
-┌─────────────────────────────────────────────────────────────────────────┐
-│                      Nautilus Trader 核心引擎                            │
-│ ┌─────────────────────────────────────────────────────────────────────┐ │
-│ │                    DataEngine (Rust 核心)                            │ │
-│ │  WebSocket 管理 · 订单簿维护 · 数据标准化 · 高性能处理                 │ │
-│ └─────────────────────────────────────────────────────────────────────┘ │
-│                       │                                                 │
-│                       ▼ QuoteTick / TradeTick                           │
-│ ┌─────────────────────────────────────────────────────────────────────┐ │
-│ │                  StrategyEngine (Python)                             │ │
-│ │  ┌──────────────────────┐  ┌──────────────────────┐                 │ │
-│ │  │  CrazytraStrategy    │  │  MACrossLLMStrategy  │                 │ │
-│ │  │  (基类 + LLM 支持)    │  │  (示例策略)          │                 │ │
-│ │  └──────────────────────┘  └──────────────────────┘                 │ │
-│ │         ▲                                                            │ │
-│ │         │ LLM 权重注入                                               │ │
-│ │  ┌──────────────────────┐                                           │ │
-│ │  │  LLMWeightActor      │ ◄─────── Redis: llm.weight                │ │
-│ │  └──────────────────────┘                                           │ │
-│ └─────────────────────────────────────────────────────────────────────┘ │
-│                       │                                                 │
-│                       ▼ 订单请求                                        │
-│ ┌─────────────────────────────────────────────────────────────────────┐ │
-│ │                    RiskEngine                                        │ │
-│ │  仓位限制 · 保证金检查 · 风险指标监控                                  │ │
-│ └─────────────────────────────────────────────────────────────────────┘ │
-│                       │                                                 │
-│                       ▼ 风控通过                                        │
-│ ┌─────────────────────────────────────────────────────────────────────┐ │
-│ │                  ExecutionEngine                                     │ │
-│ │  订单路由 · 状态机管理 · 成交回报 · 多交易所支持                        │ │
-│ │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                  │ │
-│ │  │ 纸面交易模拟 │  │  订单管理   │  │   实盘执行   │                  │ │
-│ │  └─────────────┘  └─────────────┘  └─────────────┘                  │ │
-│ └─────────────────────────────────────────────────────────────────────┘ │
-│                       │                                                 │
-│                       ▼ 订单事件                                        │
-│ ┌─────────────────────────────────────────────────────────────────────┐ │
-│ │                  RedisBridgeActor                                    │ │
-│ │  Nautilus 事件 → Redis JSON 格式转换 · 异步发布                       │ │
-│ └─────────────────────────────────────────────────────────────────────┘ │
-└─────────────────────────┬───────────────────────────────────────────────┘
-                          ▼ Redis Streams（桥接层）
-┌─────────────────────────────────────────────────────────────────────────┐
-│                       Redis Streams 桥接层                               │
-│  market.tick.* │ order.event │ position.update │ account.state          │
-└─────────────────────────────────────────────────────────────────────────┘
-          │                      │                      │
-          ▼                      ▼                      ▼
-┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
-│   LLM 层         │  │   API 网关       │  │   前端           │
-│   (Python)       │  │   (Go/FastAPI)   │  │   (React)        │
-│                  │  │                  │  │                  │
-│ GPT-4o/Claude    │  │ REST/WebSocket   │  │ 实时图表         │
-│ Ollama 本地      │  │ 统一入口         │  │ 策略编辑器       │
-│ 新闻情感分析     │  │                  │  │ 回测报告         │
-└──────────────────┘  └──────────────────┘  └──────────────────┘
-          │
-          └─────► Redis: llm.weight (权重向量)
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                           MirrorQuant 平台层                               │
+│                     （策略、风控、执行、LLM、多租户、SaaS）                     │
+│                                                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │                          StrategyEngine（Actor）                       │  │
+│  │  - 订阅行情（market.tick.*）                                           │  │
+│  │  - 订阅订单事件（order.event.*）                                       │  │
+│  │  - 生成订单请求（内部消息）                                            │  │
+│  │  - 支持多语言 / LLM / 沙箱                                             │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+│                                                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │                            RiskEngine（Actor）                         │  │
+│  │  - 仓位限制                                                            │  │
+│  │  - 保证金检查                                                          │  │
+│  │  - 风险指标监控                                                        │  │
+│  │  - 风控通过 → 转发订单请求                                             │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+│                                                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │                         ExecutionEngine（Actor）                       │  │
+│  │  - 接收风控通过的订单请求                                              │  │
+│  │  - 写入 Redis：order.request.{accountId}                               │  │
+│  │  - 订阅 order.event.{accountId}                                        │  │
+│  │  - 维护订单状态机                                                      │  │
+│  │  - 写入 position.update / account.state                                │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+│                                                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │                         LLMWeightActor（Actor）                        │  │
+│  │  - 生成策略权重向量                                                    │  │
+│  │  - 写入 Redis：llm.weight.{strategyId}                                 │  │
+│  │  - 支持 GPT-4o / Claude / Ollama                                       │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+│                                                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │                         API Gateway（Go/FastAPI）                      │  │
+│  │  - REST / WebSocket                                                     │  │
+│  │  - 用户系统 / 多租户 / 鉴权                                             │  │
+│  │  - 前端统一入口                                                         │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+│                                                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │                               前端（React）                            │  │
+│  │  - 策略编辑器                                                           │  │
+│  │  - 回测管理                                                             │  │
+│  │  - 实盘监控                                                             │  │
+│  │  - 实时图表                                                             │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+└───────────────────────────────▲──────────────────────────────────────────────┘
+                                │
+                                │ Redis Streams（事件总线）
+                                ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                               Redis Streams 事件层                            │
+│                                                                              │
+│  market.tick.{exchange}.{symbol}   ← 行情流（共享）                          │
+│  order.request.{accountId}         ← MirrorQuant → Runner                    │
+│  order.event.{accountId}           ← Runner → MirrorQuant                    │
+│  position.update.{accountId}       ← MirrorQuant 内部更新                     │
+│  account.state.{accountId}         ← MirrorQuant 内部更新                     │
+│  llm.weight.{strategyId}           ← LLMWeightActor → StrategyEngine         │
+└───────────────────────────────▲──────────────────────────────────────────────┘
+                                │
+                                │ 订单请求 / 成交回报（异步事件）
+                                ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                         NautilusTrader Runner（执行后端）                     │
+│                                                                              │
+│  - 订阅：order.request.{accountId}                                          │
+│  - 将 JSON 订单转换为 NT 内部订单对象                                       │
+│  - 调用 NautilusTrader 执行（实盘 / 回测）                                   │
+│  - 接收交易所回报（NEW / FILL / CANCEL / REJECT）                           │
+│  - 写入：order.event.{accountId}                                            │
+│                                                                              │
+│  （可水平扩展：每个用户 / 每个账户 / 每个策略独立 Runner）                   │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 2.2 数据流路径
+### 2.3 Polymarket 专业架构实现
 
-**Tick 数据流**：
+#### 2.3.1 Polymarket 数据流向（行情流）
+
 ```
-交易所 → Nautilus DataEngine → RedisBridgeActor → Redis → 前端/API网关
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                           Polymarket（行情数据源）                             │
+│      - WebSocket: OrderBook / Trades / Market Updates                        │
+└───────────────────────────────┬──────────────────────────────────────────────┘
+                                │ WebSocket
+                                ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                     NautilusTrader Runner（行情接入模块）                      │
+│   - 连接 Polymarket WS                                                     │
+│   - 解析 OrderBook / Trades                                                │
+│   - 标准化为 MirrorQuant Tick 格式                                          │
+│   - 写入 Redis: market.tick.polymarket.{marketId}                           │
+└───────────────────────────────┬──────────────────────────────────────────────┘
+                                │ Redis Streams（行情事件）
+                                ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                           MirrorQuant 平台层（订阅行情）                       │
+│                                                                              │
+│  StrategyEngine（Actor）                                                     │
+│    - 订阅：market.tick.polymarket.*                                          │
+│    - 触发策略逻辑                                                            │
+│                                                                              │
+│  LLMWeightActor（Actor）                                                     │
+│    - 可根据行情生成权重（可选）                                              │
+│                                                                              │
+│  前端（React）                                                               │
+│    - 实时行情图表                                                            │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**LLM 权重流**：
+#### 2.3.2 Polymarket 订单处理流向（Order Flow）
+
 ```
-LLM层 → Redis llm.weight → LLMWeightActor → Strategy.on_llm_weight_updated()
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                           MirrorQuant 平台层（订单生成）                       │
+│                                                                              │
+│  StrategyEngine（Actor）                                                     │
+│    - 根据行情生成订单请求（内部消息）                                        │
+│    - 发送给 RiskEngine                                                       │
+│                                                                              │
+│  RiskEngine（Actor）                                                         │
+│    - 仓位检查 / 保证金检查 / 风控规则                                        │
+│    - 风控通过 → 转发订单请求                                                │
+│                                                                              │
+│  ExecutionEngine（Actor）                                                    │
+│    - 接收订单请求                                                            │
+│    - 写入 Redis: order.request.{accountId}                                  │
+└───────────────────────────────┬──────────────────────────────────────────────┘
+                                │ Redis Streams（订单请求）
+                                ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                     NautilusTrader Runner（Polymarket 执行后端）              │
+│                                                                              │
+│  - 订阅：order.request.{accountId}                                           │
+│  - 将 JSON 转换为 NT 内部订单对象                                            │
+│  - 调用 NT 的 Polymarket Connector 下单                                      │
+│  - 接收 Polymarket 回报（NEW / FILL / CANCEL / REJECT）                      │
+│  - 写入 Redis: order.event.{accountId}                                      │
+└───────────────────────────────┬──────────────────────────────────────────────┘
+                                │ Redis Streams（订单事件）
+                                ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                           MirrorQuant 平台层（订单回报）                       │
+│                                                                              │
+│  ExecutionEngine（Actor）                                                    │
+│    - 订阅：order.event.{accountId}                                           │
+│    - 更新订单状态机                                                          │
+│    - 写入：position.update.{accountId}                                       │
+│                                                                              │
+│  StrategyEngine（Actor）                                                     │
+│    - 订阅订单事件（用于策略内状态更新）                                      │
+│                                                                              │
+│  前端（React）                                                               │
+│    - 实时订单状态 / 成交明细                                                 │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**订单流**：
+### 2.4 关键数据流路径
+
+#### 2.4.1 行情数据流
 ```
-Strategy → RiskEngine → ExecutionEngine → 交易所
-                                        ↓
-                                 RedisBridgeActor → Redis → 前端
+Polymarket WS → NautilusTrader Runner → Redis(market.tick.polymarket.*) → MirrorQuant StrategyEngine
+```
+
+#### 2.4.2 订单执行流
+```
+StrategyEngine → RiskEngine → ExecutionEngine → Redis(order.request.*) → NautilusTrader Runner → Redis(order.event.*) → ExecutionEngine
+```
+
+#### 2.4.3 LLM 权重流
+```
+LLMWeightActor → Redis(llm.weight.*) → StrategyEngine
+```
+
+#### 2.4.4 多租户隔离设计
+```
+user:u123:order.request.acc001    # 用户级订单请求
+user:u123:order.event.acc001      # 用户级订单事件
+user:u123:position.update.acc001  # 用户级持仓更新
+user:u123:account.state.acc001     # 用户级账户状态
+user:u123:llm.weight.stratA        # 用户级策略权重
 ```
 
 ---
@@ -152,7 +258,7 @@ Strategy → RiskEngine → ExecutionEngine → 交易所
 - 策略生命周期管理
 - 事件路由和分发
 - 状态持久化和恢复
-- 热重载支持（通过 CrazytraStrategy）
+- 热重载支持（通过 MirrorQuantStrategy）
 
 **3. RiskEngine**
 - 实时风控检查
@@ -181,7 +287,7 @@ class RedisBridgeActor(Actor):
     """Nautilus → Redis 桥接"""
     
     def on_quote_tick(self, tick: QuoteTick) -> None:
-        # 转换为 Crazytra JSON 格式
+        # 转换为 MirrorQuant JSON 格式
         payload = {
             "symbol": self._convert_symbol(tick.instrument_id),
             "exchange": tick.instrument_id.venue.value.lower(),
@@ -213,10 +319,10 @@ class LLMWeightActor(Actor):
         self._inject_to_strategies(symbol, effective_score)
 ```
 
-**CrazytraStrategy** (`nautilus-core/strategies/base_strategy.py`)
+**MirrorQuantStrategy** (`nautilus-core/strategies/base_strategy.py`)
 
 ```python
-class CrazytraStrategy(Strategy):
+class MirrorQuantStrategy(Strategy):
     """扩展 Nautilus Strategy，支持 LLM"""
     
     def get_effective_llm_factor(self, symbol: str) -> float:
@@ -265,7 +371,7 @@ class CrazytraStrategy(Strategy):
 from nautilus_trader.config import TradingNodeConfig
 
 config = TradingNodeConfig(
-    trader_id="CRAZYTRA-001",
+    trader_id="MIRRORQUANT-001",
     log_level="INFO",
     
     # 数据客户端
@@ -362,18 +468,18 @@ risk.alert                         # 风控告警
 
 #### 3.3.1 职责定位
 
-策略层基于 **Nautilus Strategy** 框架，扩展了 **CrazytraStrategy** 基类以支持 LLM 权重注入。
+策略层基于 **Nautilus Strategy** 框架，扩展了 **MirrorQuantStrategy** 基类以支持 LLM 权重注入。
 
-#### 3.3.2 CrazytraStrategy 基类
+#### 3.3.2 MirrorQuantStrategy 基类
 
 ```python
 from nautilus_trader.trading.strategy import Strategy
 from decimal import Decimal
 
-class CrazytraStrategy(Strategy):
+class MirrorQuantStrategy(Strategy):
     """扩展 Nautilus Strategy，添加 LLM 支持"""
     
-    def __init__(self, config: CrazytraStrategyConfig):
+    def __init__(self, config: MirrorQuantStrategyConfig):
         super().__init__(config)
         self._llm_weights: dict[str, tuple] = {}  # (score, confidence, metadata)
     
@@ -420,7 +526,7 @@ class CrazytraStrategy(Strategy):
 #### 3.3.3 示例策略：均线交叉 + LLM
 
 ```python
-class MACrossLLMStrategy(CrazytraStrategy):
+class MACrossLLMStrategy(MirrorQuantStrategy):
     """均线交叉策略 + LLM 权重调整"""
     
     def on_start(self) -> None:
@@ -494,7 +600,7 @@ print(result.stats_returns())
 
 #### 3.3.5 策略开发流程
 
-1. **继承 CrazytraStrategy**
+1. **继承 MirrorQuantStrategy**
 2. **实现抽象方法**：`calculate_signal_strength`, `calculate_signal_direction`
 3. **订阅数据**：`subscribe_quote_ticks` 或 `subscribe_bars`
 4. **使用 LLM 因子**：`get_effective_llm_factor()` 调整仓位
@@ -1428,7 +1534,7 @@ impl Connector for Trading212Connector {
 ## 五、目录结构
 
 ```
-Crazytra/
+MirrorQuant/
 ├── README.md                      # 项目说明
 ├── Makefile                       # 构建脚本
 ├── .env.example                   # 环境变量示例
@@ -2493,7 +2599,7 @@ logging:
   format: json
   output:
     - stdout
-    - file: /var/log/crazytra/app.log
+    - file: /var/log/mirrorquant/app.log
   fields:
     - timestamp
     - level
@@ -2517,7 +2623,7 @@ important_events:
 ```yaml
 # 告警配置 alerting.yml
 groups:
-  - name: crazytra_alerts
+  - name: mirrorquant_alerts
     rules:
       # 数据延迟告警
       - alert: DataLatencyHigh
@@ -2571,7 +2677,7 @@ groups:
 // dashboard.json 示例
 {
   "dashboard": {
-    "title": "Crazytra Trading System",
+    "title": "MirrorQuant Trading System",
     "panels": [
       {
         "title": "实时延迟",
@@ -2810,7 +2916,7 @@ ws.onmessage = (event) => {
 
 ### 12.1 多租户部署模式
 
-Crazytra 支持两种部署模式：
+MirrorQuant 支持两种部署模式：
 
 1. **单租户模式**（当前）：独立部署，适合个人或单一机构
 2. **多租户 SaaS 模式**（扩展）：云端部署，支持多个租户共享基础设施
@@ -3141,4 +3247,4 @@ OLLAMA_MODEL=mistral:7b-instruct-q4_K_M
 
 **文档版本**：v1.0  
 **最后更新**：2024年  
-**维护者**：Crazytra Team
+**维护者**：MirrorQuant Team

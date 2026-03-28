@@ -114,7 +114,7 @@ func (tb *TelegramBot) Start() error {
 	tb.logger.Info("Starting Telegram Bot service")
 
 	// 发送启动消息
-	tb.sendMessage("🤖 Crazytra 交易机器人已启动\n\n准备接收交易通知...")
+	tb.sendMessage("🤖 MirrorQuant 交易机器人已启动\n\n准备接收交易通知...")
 
 	// 订阅 Redis Streams
 	go tb.subscribeOrderEvents()
@@ -135,7 +135,7 @@ func (tb *TelegramBot) Stop() {
 	tb.logger.Info("Stopping Telegram Bot service")
 	tb.cancel()
 	tb.redis.Close()
-	tb.sendMessage("🛑 Crazytra 交易机器人已停止")
+	tb.sendMessage("🛑 MirrorQuant 交易机器人已停止")
 }
 
 // 订阅订单事件
@@ -478,7 +478,7 @@ func (tb *TelegramBot) handleCommands() {
 		if update.Message.IsCommand() {
 			switch update.Message.Command() {
 			case "start":
-				tb.sendMessage("👋 欢迎使用 Crazytra 交易机器人！\n\n" +
+				tb.sendMessage("👋 欢迎使用 MirrorQuant 交易机器人！\n\n" +
 					"你可以用自然语言和我对话，例如：\n" +
 					"• 查看我的账户状态\n" +
 					"• BTC现在多少钱\n" +

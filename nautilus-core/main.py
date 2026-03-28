@@ -1,6 +1,6 @@
 """
 Nautilus Trader 主入口
-整合 Nautilus 与 Crazytra 架构
+整合 Nautilus 与 MirrorQuant 架构
 
 运行模式：
 1. 回测模式：python main.py --mode backtest --config backtest_config.json
@@ -213,7 +213,7 @@ def main():
     """主入口"""
     import argparse
     
-    parser = argparse.ArgumentParser(description="Nautilus Trader - Crazytra Integration")
+    parser = argparse.ArgumentParser(description="Nautilus Trader - MirrorQuant Integration")
     parser.add_argument(
         "--mode",
         type=str,

@@ -1,18 +1,18 @@
-# Crazytra 策略开发指南
+# MirrorQuant 策略开发指南
 
 本目录包含基于 Nautilus Trader 的策略实现，支持 LLM 权重增强。
 
 ## 策略架构
 
 ```
-CrazytraStrategy (基类)
+MirrorQuantStrategy (基类)
 ├── LLM 权重管理
 ├── 热重载支持
 ├── 状态导入/导出
 └── 抽象方法定义
 
 MACrossLLMStrategy (示例)
-├── 继承 CrazytraStrategy
+├── 继承 MirrorQuantStrategy
 ├── 均线交叉逻辑
 ├── LLM 权重调整仓位
 └── 完整的订单管理
@@ -23,11 +23,11 @@ MACrossLLMStrategy (示例)
 ### 1. 创建新策略
 
 ```python
-from nautilus_core.strategies.base_strategy import CrazytraStrategy, CrazytraStrategyConfig
+from nautilus_core.strategies.base_strategy import MirrorQuantStrategy, MirrorQuantStrategyConfig
 from nautilus_trader.model.data import QuoteTick
 from pydantic import Field
 
-class MyStrategyConfig(CrazytraStrategyConfig):
+class MyStrategyConfig(MirrorQuantStrategyConfig):
     """策略配置"""
     instrument_id: str
     my_param: int = Field(default=10, ge=1, le=100)
@@ -35,7 +35,7 @@ class MyStrategyConfig(CrazytraStrategyConfig):
     enable_llm: bool = True
     llm_weight_factor: float = 0.5
 
-class MyStrategy(CrazytraStrategy):
+class MyStrategy(MirrorQuantStrategy):
     """我的策略"""
     
     def __init__(self, config: MyStrategyConfig):
@@ -102,7 +102,7 @@ python main.py --mode paper  # 纸面交易
 python main.py --mode live   # 实盘交易
 ```
 
-## CrazytraStrategy 基类
+## MirrorQuantStrategy 基类
 
 ### 核心功能
 
@@ -175,7 +175,7 @@ def calculate_signal_direction(self, tick: QuoteTick) -> str:
 
 ## 配置参数
 
-### CrazytraStrategyConfig
+### MirrorQuantStrategyConfig
 
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
@@ -249,7 +249,7 @@ Redis Stream: llm.weight
 LLMWeightActor
     ↓ 时间衰减融合
     ↓ 发布事件
-CrazytraStrategy.on_llm_weight_updated()
+MirrorQuantStrategy.on_llm_weight_updated()
     ↓ 调整仓位
 订单提交
 ```

@@ -69,13 +69,13 @@ REDIS_URL=redis:6379
 
 **使用 Docker:**
 ```bash
-docker build -t crazytra-telegram-bot .
+docker build -t mirrorquant-telegram-bot .
 docker run -d \
   --name telegram-bot \
   -e TELEGRAM_BOT_TOKEN=your_token \
   -e TELEGRAM_CHAT_ID=your_chat_id \
   -e REDIS_URL=redis:6379 \
-  crazytra-telegram-bot
+  mirrorquant-telegram-bot
 ```
 
 **本地运行:**

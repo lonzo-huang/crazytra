@@ -1,5 +1,5 @@
-# Nautilus Trader - 固定到 patch 版本
-nautilus_trader==1.204.0
+# Nautilus Trader - 兼容 Python 3.14 的最新版本
+nautilus_trader==1.224.0
 
 # Redis 客户端
 redis[asyncio]==5.0.1

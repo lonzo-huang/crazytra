@@ -1,0 +1,64 @@
+# 简化版 Docker Compose - 只启动基础服务
+version: '3.8'
+
+services:
+  # Redis - 缓存和消息队列
+  redis:
+    image: redis:7-alpine
+    container_name: mirrorquant-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+    networks:
+      - mirrorquant-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # TimescaleDB - 时序数据库
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: mirrorquant-timescaledb
+    environment:
+      - POSTGRES_DB=mirrorquant
+      - POSTGRES_USER=mirrorquant
+      - POSTGRES_PASSWORD=mirrorquant123
+      - POSTGRES_HOST_AUTH_METHOD=md5
+    ports:
+      - "5432:5432"
+    volumes:
+      - timescaledb_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - mirrorquant-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mirrorquant"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # Ollama - 本地 LLM 服务
+  ollama:
+    image: ollama/ollama:latest
+    container_name: mirrorquant-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    networks:
+      - mirrorquant-network
+
+volumes:
+  redis_data:
+  timescaledb_data:
+  ollama_data:
+
+networks:
+  mirrorquant-network:
+    driver: bridge

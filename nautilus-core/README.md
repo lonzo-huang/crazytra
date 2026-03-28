@@ -1,6 +1,6 @@
 # Nautilus Trader 整合模块
 
-本模块将 Nautilus Trader 整合到 Crazytra 自动交易系统中，保持原有架构的 Redis Streams 作为桥接层。
+本模块将 Nautilus Trader 整合到 MirrorQuant 自动交易系统中，保持原有架构的 Redis Streams 作为桥接层。
 
 ## 架构整合
 
@@ -36,7 +36,7 @@ API 网关 (Go)        →  保留，订阅 Redis
   - 实现时间衰减融合（30分钟半衰期）
   - 发布 LLMWeightUpdate 事件到策略
 
-### 3. CrazytraStrategy 基类
+### 3. MirrorQuantStrategy 基类
 - **职责**：扩展 Nautilus Strategy，支持 LLM 权重
 - **位置**：`strategies/base_strategy.py`
 - **关键特性**：
@@ -131,7 +131,7 @@ LLMWeightActor
     ↓
 LLMWeightUpdate 事件
     ↓
-CrazytraStrategy.on_llm_weight_updated()
+MirrorQuantStrategy.on_llm_weight_updated()
     ↓
 调整仓位大小
 ```
@@ -183,9 +183,9 @@ Redis Stream: order.event
 
 ```python
 from pydantic import Field
-from nautilus_core.strategies.base_strategy import CrazytraStrategyConfig
+from nautilus_core.strategies.base_strategy import MirrorQuantStrategyConfig
 
-class MyStrategyConfig(CrazytraStrategyConfig):
+class MyStrategyConfig(MirrorQuantStrategyConfig):
     instrument_id: str
     my_param: int = Field(default=20, ge=5, le=100)
     enable_llm: bool = True
@@ -195,9 +195,9 @@ class MyStrategyConfig(CrazytraStrategyConfig):
 ### 2. 实现策略类
 
 ```python
-from nautilus_core.strategies.base_strategy import CrazytraStrategy
+from nautilus_core.strategies.base_strategy import MirrorQuantStrategy
 
-class MyStrategy(CrazytraStrategy):
+class MyStrategy(MirrorQuantStrategy):
     def __init__(self, config: MyStrategyConfig):
         super().__init__(config)
         # 初始化策略状态
@@ -315,7 +315,7 @@ RedisBridgeActor 使用 `asyncio.create_task()` 异步发布，不阻塞 Nautilu
 
 ### 从自建策略层迁移
 
-1. 将 `BaseStrategy` 改为继承 `CrazytraStrategy`
+1. 将 `BaseStrategy` 改为继承 `MirrorQuantStrategy`
 2. 将 `on_tick()` 改为 `on_quote_tick()`
 3. 添加 `calculate_signal_strength()` 和 `calculate_signal_direction()` 方法
 4. 使用 `self.order_factory` 创建订单

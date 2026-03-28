@@ -258,15 +258,15 @@ def test_strategy_llm_factor():
     - score = 0 → factor = 1.0 (中性)
     - score = 1 → factor = 2.0 (强烈看涨)
     """
-    from nautilus_core.strategies.base_strategy import CrazytraStrategy, CrazytraStrategyConfig
+    from nautilus_core.strategies.base_strategy import MirrorQuantStrategy, MirrorQuantStrategyConfig
     
-    config = CrazytraStrategyConfig(
+    config = MirrorQuantStrategyConfig(
         strategy_id="test",
         enable_llm=True,
         llm_weight_factor=1.0,  # 100% 影响
     )
     
-    class TestStrategy(CrazytraStrategy):
+    class TestStrategy(MirrorQuantStrategy):
         def calculate_signal_strength(self, tick):
             return 0.5
         

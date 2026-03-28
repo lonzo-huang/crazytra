@@ -172,3 +172,14 @@ dmypy.json
 
 # Cython
 cython_debug/
+
+# Windows specific
+*.msi
+*.bat
+
+# Test results and temporary files
+*_test_results.json
+deployment_report.json
+
+# Large binary files
+go*.msi

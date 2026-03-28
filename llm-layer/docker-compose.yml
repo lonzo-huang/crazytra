@@ -4,7 +4,7 @@ services:
   # Ollama 本地 LLM 服务
   ollama:
     image: ollama/ollama:latest
-    container_name: crazytra-ollama
+    container_name: mirrorquant-ollama
     ports:
       - "11434:11434"
     volumes:
@@ -24,7 +24,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: crazytra-llm-layer
+    container_name: mirrorquant-llm-layer
     depends_on:
       - ollama
     environment:
@@ -37,12 +37,12 @@ services:
       - .env
     restart: unless-stopped
     networks:
-      - crazytra-network
+      - mirrorquant-network
 
   # Redis (如果还没有运行)
   redis:
     image: redis:7-alpine
-    container_name: crazytra-redis
+    container_name: mirrorquant-redis
     ports:
       - "6379:6379"
     volumes:
@@ -50,12 +50,12 @@ services:
     command: redis-server --appendonly yes
     restart: unless-stopped
     networks:
-      - crazytra-network
+      - mirrorquant-network
 
 volumes:
   ollama_data:
   redis_data:
 
 networks:
-  crazytra-network:
+  mirrorquant-network:
     driver: bridge

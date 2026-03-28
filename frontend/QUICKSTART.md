@@ -342,4 +342,4 @@ import { Profiler } from 'react';
 
 - **文档**: `frontend/README.md`
 - **WebSocket**: `frontend/docs/WEBSOCKET.md`
-- **Issues**: https://github.com/lonzo-huang/crazytra/issues
+- **Issues**: https://github.com/lonzo-huang/mirrorquant/issues

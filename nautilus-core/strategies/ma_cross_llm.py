@@ -13,21 +13,21 @@ from nautilus_trader.model.instruments import Instrument
 from nautilus_trader.model.orders import MarketOrder
 from pydantic import Field
 
-from nautilus_core.strategies.base_strategy import CrazytraStrategy, CrazytraStrategyConfig
+from nautilus_core.strategies.base_strategy import MirrorQuantStrategy, MirrorQuantStrategyConfig
 
 
-class MACrossLLMConfig(CrazytraStrategyConfig):
+class MACrossLLMConfig(MirrorQuantStrategyConfig):
     """均线交叉策略配置"""
     instrument_id: str
     fast_period: int = Field(default=10, ge=2, le=100)
     slow_period: int = Field(default=30, ge=5, le=200)
     trade_size: Decimal = Field(default=Decimal("0.01"))
-    # LLM 配置继承自 CrazytraStrategyConfig
+    # LLM 配置继承自 MirrorQuantStrategyConfig
     enable_llm: bool = True
     llm_weight_factor: float = 0.5
 
 
-class MACrossLLMStrategy(CrazytraStrategy):
+class MACrossLLMStrategy(MirrorQuantStrategy):
     """
     均线交叉策略 + LLM 权重增强
     

@@ -19,7 +19,7 @@ pip install -r requirements.txt
 
 ```bash
 # 使用 Docker
-docker run -d -p 6379:6379 --name crazytra-redis redis:alpine
+docker run -d -p 6379:6379 --name mirrorquant-redis redis:alpine
 
 # 或使用本地 Redis
 redis-server
@@ -49,7 +49,7 @@ python main.py --mode paper
 ============================================================
 Nautilus Trading Node Started
 ============================================================
-Trader ID: CRAZYTRA-001
+Trader ID: MIRRORQUANT-001
 Trading Mode: paper
 Redis URL: redis://localhost:6379
 ============================================================
@@ -151,19 +151,19 @@ from nautilus_trader.model.data import QuoteTick
 from nautilus_trader.model.enums import OrderSide
 
 from nautilus_core.strategies.base_strategy import (
-    CrazytraStrategy,
-    CrazytraStrategyConfig,
+    MirrorQuantStrategy,
+    MirrorQuantStrategyConfig,
 )
 
 
-class MyStrategyConfig(CrazytraStrategyConfig):
+class MyStrategyConfig(MirrorQuantStrategyConfig):
     """我的策略配置"""
     instrument_id: str
     threshold: float = Field(default=0.02, ge=0.01, le=0.1)
     trade_size: Decimal = Field(default=Decimal("0.01"))
 
 
-class MyStrategy(CrazytraStrategy):
+class MyStrategy(MirrorQuantStrategy):
     """我的策略"""
     
     def __init__(self, config: MyStrategyConfig):

@@ -1,4 +1,4 @@
-# Crazytra - 智能自动交易系统
+# MirrorQuant - 专业级智能自动交易系统
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
 [![Rust](https://img.shields.io/badge/Rust-1.79+-orange.svg)](https://www.rust-lang.org/)
@@ -6,31 +6,35 @@
 [![Nautilus](https://img.shields.io/badge/Nautilus-1.204.0-green.svg)](https://nautilustrader.io/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-全栈自动交易系统，整合 **Nautilus Trader** 核心引擎，支持多市场、多策略、**LLM 情感增强**的智能交易。
+**专业级三层事件驱动架构**的智能自动交易系统，完全解耦平台层、事件层和执行层，支持多市场、多策略、**LLM 情感增强**、**多租户 SaaS**。
 
 ## ✨ 核心特性
 
-- 🚀 **Nautilus Trader 整合** - 专业级交易引擎，回测=实盘
+- 🏗️ **专业级三层架构** - MirrorQuant平台层 + Redis Streams事件层 + NautilusTrader Runner执行层
+- 🔄 **完全事件驱动** - Redis Streams 解耦所有组件，可水平扩展
 - 🤖 **LLM 增强** - 实时新闻分析，权重注入策略
 - 📊 **多市场支持** - Binance、Polymarket、Trading212、Tiger
 - 🛡️ **智能风控** - 熔断器、仓位管理、Kelly 定仓
 - 🎯 **双模式** - 纸面交易模拟 + 实盘执行
 - 📈 **实时前端** - React + WebSocket 实时看板
+- 💼 **多租户 SaaS** - Redis 命名空间隔离，商业化就绪
 
-## 🏗️ 技术架构
+## 🏗️ 专业级架构
 
-**Nautilus 整合后的架构：**
+### 三层架构设计
 
-| 原有组件 | 整合后 | 语言 | 说明 |
-|---------|--------|------|------|
-| Rust 数据层 | **Nautilus DataEngine** | Rust | 高性能数据引擎 |
-| Python 策略层 | **Nautilus Strategy + CrazytraStrategy** | Python | LLM 权重支持 |
-| Go 风控层 | **Nautilus RiskEngine** (可选) | Go | 风控引擎 |
-| Go 交易层 | **Nautilus ExecutionEngine** | Go | 执行引擎 |
-| Redis Streams | **保留** | - | 桥接外部系统 |
-| LLM 层 | **独立进程** | Python | 新闻分析 |
-| API 网关 | **保留** | Go | REST/WebSocket |
-| 前端 | **不变** | React | 实时 UI |
+| 层级 | 组件 | 语言 | 职责 |
+|------|------|------|------|
+| **MirrorQuant 平台层** | StrategyEngine/RiskEngine/ExecutionEngine | Python/Go | 策略、风控、执行、LLM、多租户 |
+| **Redis Streams 事件层** | 事件总线 | - | 完全解耦通信 |
+| **NautilusTrader Runner** | 执行后端 | Rust | 纯执行、可替换 |
+
+### Polymarket 专业实现
+
+```
+行情流: Polymarket WS → NautilusTrader Runner → Redis → MirrorQuant StrategyEngine
+订单流: StrategyEngine → RiskEngine → ExecutionEngine → Redis → NautilusTrader Runner
+```
 
 ## 🚀 快速启动
 
@@ -38,7 +42,7 @@
 
 ```bash
 # 1. 启动 Redis
-docker run -d -p 6379:6379 --name crazytra-redis redis:alpine
+docker run -d -p 6379:6379 --name mirrorquant-redis redis:alpine
 
 # 2. 安装 Nautilus 核心
 cd nautilus-core
@@ -87,10 +91,10 @@ cp .env.example .env
 ## 📁 项目结构
 
 ```
-Crazytra/
+MirrorQuant/
 ├── nautilus-core/           # ⭐ Nautilus Trader 核心（新增）
 │   ├── actors/              # RedisBridgeActor, LLMWeightActor
-│   ├── strategies/          # CrazytraStrategy 基类 + 示例策略
+│   ├── strategies/          # MirrorQuantStrategy 基类 + 示例策略
 │   ├── scripts/             # 验证和启动脚本
 │   ├── tests/               # 集成测试
 │   ├── main.py              # 主入口

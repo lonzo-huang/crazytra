@@ -1,7 +1,7 @@
 """
 策略使用示例
 
-展示如何配置和运行 CrazytraStrategy 策略。
+展示如何配置和运行 MirrorQuantStrategy 策略。
 """
 
 import asyncio

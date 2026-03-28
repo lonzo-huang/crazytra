@@ -1,4 +1,4 @@
-# Crazytra 多租户 SaaS 架构设计
+# MirrorQuant 多租户 SaaS 架构设计
 
 ## 📋 目录
 

@@ -4,7 +4,7 @@ services:
   # Redis - 消息总线和缓存
   redis:
     image: redis:7-alpine
-    container_name: crazytra-redis
+    container_name: mirrorquant-redis
     ports:
       - "6379:6379"
     volumes:
@@ -12,7 +12,7 @@ services:
     command: redis-server --appendonly yes --maxmemory 2gb --maxmemory-policy allkeys-lru
     restart: unless-stopped
     networks:
-      - crazytra-network
+      - mirrorquant-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -22,20 +22,20 @@ services:
   # PostgreSQL + TimescaleDB - 时序数据库
   timescaledb:
     image: timescale/timescaledb:latest-pg16
-    container_name: crazytra-timescaledb
+    container_name: mirrorquant-timescaledb
     environment:
-      POSTGRES_USER: crazytra
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-crazytra_password}
-      POSTGRES_DB: crazytra
+      POSTGRES_USER: mirrorquant
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mirrorquant_password}
+      POSTGRES_DB: mirrorquant
     ports:
       - "5432:5432"
     volumes:
       - timescaledb_data:/var/lib/postgresql/data
     restart: unless-stopped
     networks:
-      - crazytra-network
+      - mirrorquant-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U crazytra"]
+      test: ["CMD-SHELL", "pg_isready -U mirrorquant"]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -43,14 +43,14 @@ services:
   # Ollama - 本地 LLM 服务
   ollama:
     image: ollama/ollama:latest
-    container_name: crazytra-ollama
+    container_name: mirrorquant-ollama
     ports:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
     restart: unless-stopped
     networks:
-      - crazytra-network
+      - mirrorquant-network
     deploy:
       resources:
         reservations:
@@ -65,7 +65,7 @@ services:
     build:
       context: ./llm-layer
       dockerfile: Dockerfile
-    container_name: crazytra-llm-layer
+    container_name: mirrorquant-llm-layer
     depends_on:
       - redis
       - ollama
@@ -81,7 +81,7 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     restart: unless-stopped
     networks:
-      - crazytra-network
+      - mirrorquant-network
     logging:
       driver: "json-file"
       options:
@@ -93,13 +93,13 @@ services:
     build:
       context: ./nautilus-core
       dockerfile: Dockerfile
-    container_name: crazytra-nautilus-core
+    container_name: mirrorquant-nautilus-core
     depends_on:
       - redis
       - timescaledb
     environment:
       - REDIS_URL=redis://redis:6379
-      - DATABASE_URL=postgresql://crazytra:${POSTGRES_PASSWORD:-crazytra_password}@timescaledb:5432/crazytra
+      - DATABASE_URL=postgresql://mirrorquant:${POSTGRES_PASSWORD:-mirrorquant_password}@timescaledb:5432/mirrorquant
       - TRADING_MODE=${TRADING_MODE:-paper}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - BINANCE_API_KEY=${BINANCE_API_KEY}
@@ -110,7 +110,7 @@ services:
       - nautilus_data:/app/data
     restart: unless-stopped
     networks:
-      - crazytra-network
+      - mirrorquant-network
     logging:
       driver: "json-file"
       options:
@@ -122,13 +122,13 @@ services:
     build:
       context: ./api-gateway
       dockerfile: Dockerfile
-    container_name: crazytra-api-gateway
+    container_name: mirrorquant-api-gateway
     depends_on:
       - redis
       - timescaledb
     environment:
       - REDIS_URL=redis://redis:6379
-      - DATABASE_URL=postgresql://crazytra:${POSTGRES_PASSWORD:-crazytra_password}@timescaledb:5432/crazytra
+      - DATABASE_URL=postgresql://mirrorquant:${POSTGRES_PASSWORD:-mirrorquant_password}@timescaledb:5432/mirrorquant
       - PORT=8080
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - JWT_SECRET=${JWT_SECRET:-your_jwt_secret_here}
@@ -136,7 +136,7 @@ services:
       - "8080:8080"
     restart: unless-stopped
     networks:
-      - crazytra-network
+      - mirrorquant-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
@@ -156,14 +156,14 @@ services:
       args:
         - VITE_API_URL=${VITE_API_URL:-http://localhost:8080}
         - VITE_WS_URL=${VITE_WS_URL:-ws://localhost:8080/ws}
-    container_name: crazytra-frontend
+    container_name: mirrorquant-frontend
     depends_on:
       - api-gateway
     ports:
       - "3000:80"
     restart: unless-stopped
     networks:
-      - crazytra-network
+      - mirrorquant-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:80"]
       interval: 30s
@@ -173,7 +173,7 @@ services:
   # Grafana - 监控和可视化
   grafana:
     image: grafana/grafana:latest
-    container_name: crazytra-grafana
+    container_name: mirrorquant-grafana
     depends_on:
       - timescaledb
     environment:
@@ -188,14 +188,14 @@ services:
       - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
     restart: unless-stopped
     networks:
-      - crazytra-network
+      - mirrorquant-network
 
   # Telegram Bot - 交易通知服务
   telegram-bot:
     build:
       context: ./telegram-bot
       dockerfile: Dockerfile
-    container_name: crazytra-telegram-bot
+    container_name: mirrorquant-telegram-bot
     depends_on:
       - redis
       - ollama
@@ -208,7 +208,7 @@ services:
       - TZ=Asia/Shanghai
     restart: unless-stopped
     networks:
-      - crazytra-network
+      - mirrorquant-network
     logging:
       driver: "json-file"
       options:
@@ -225,5 +225,5 @@ volumes:
   grafana_data:
 
 networks:
-  crazytra-network:
+  mirrorquant-network:
     driver: bridge

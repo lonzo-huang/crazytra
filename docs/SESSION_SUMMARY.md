@@ -6,7 +6,7 @@
 
 ## 📊 完成概览
 
-本次开发会话成功完成了 Crazytra 量化交易系统的核心功能开发和文档编写。
+本次开发会话成功完成了 MirrorQuant 量化交易系统的核心功能开发和文档编写。
 
 ### ✅ 已完成的任务
 
@@ -45,7 +45,7 @@
 - `nautilus-core/examples/strategy_example.py` - 使用示例
 
 **内容**:
-- CrazytraStrategy 基类使用方法
+- MirrorQuantStrategy 基类使用方法
 - LLM 权重集成
 - 热重载支持
 - 最佳实践
@@ -239,8 +239,8 @@
 
 ```bash
 # 克隆仓库
-git clone https://github.com/lonzo-huang/crazytra.git
-cd crazytra
+git clone https://github.com/lonzo-huang/mirrorquant.git
+cd mirrorquant
 
 # 配置环境
 cp .env.example .env
@@ -250,7 +250,7 @@ cp .env.example .env
 docker-compose up -d
 
 # 初始化 LLM
-docker exec -it crazytra-ollama ollama pull mistral:7b-instruct-q4_K_M
+docker exec -it mirrorquant-ollama ollama pull mistral:7b-instruct-q4_K_M
 
 # 访问
 # 前端: http://localhost:3000
@@ -350,8 +350,8 @@ docker exec -it crazytra-ollama ollama pull mistral:7b-instruct-q4_K_M
 
 ## 📞 联系方式
 
-- **GitHub**: https://github.com/lonzo-huang/crazytra
-- **Issues**: https://github.com/lonzo-huang/crazytra/issues
+- **GitHub**: https://github.com/lonzo-huang/mirrorquant
+- **Issues**: https://github.com/lonzo-huang/mirrorquant/issues
 
 ## 📄 许可证
 

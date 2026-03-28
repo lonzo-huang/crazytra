@@ -1,6 +1,6 @@
-# Crazytra 部署指南
+# MirrorQuant 部署指南
 
-本文档介绍如何部署 Crazytra 量化交易系统。
+本文档介绍如何部署 MirrorQuant 量化交易系统。
 
 ## 系统要求
 
@@ -30,8 +30,8 @@
 ### 1. 克隆仓库
 
 ```bash
-git clone https://github.com/lonzo-huang/crazytra.git
-cd crazytra
+git clone https://github.com/lonzo-huang/mirrorquant.git
+cd mirrorquant
 ```
 
 ### 2. 配置环境变量
@@ -85,7 +85,7 @@ docker-compose logs -f nautilus-core
 
 ```bash
 # 进入 Ollama 容器
-docker exec -it crazytra-ollama bash
+docker exec -it mirrorquant-ollama bash
 
 # 拉取模型
 ollama pull mistral:7b-instruct-q4_K_M
@@ -110,7 +110,7 @@ exit
 
 **健康检查**:
 ```bash
-docker exec crazytra-redis redis-cli ping
+docker exec mirrorquant-redis redis-cli ping
 ```
 
 ### TimescaleDB
@@ -121,7 +121,7 @@ docker exec crazytra-redis redis-cli ping
 
 **连接**:
 ```bash
-docker exec -it crazytra-timescaledb psql -U crazytra -d crazytra
+docker exec -it mirrorquant-timescaledb psql -U mirrorquant -d mirrorquant
 ```
 
 ### Ollama
@@ -133,13 +133,13 @@ docker exec -it crazytra-timescaledb psql -U crazytra -d crazytra
 **管理模型**:
 ```bash
 # 列出已安装的模型
-docker exec crazytra-ollama ollama list
+docker exec mirrorquant-ollama ollama list
 
 # 拉取新模型
-docker exec crazytra-ollama ollama pull llama3:8b
+docker exec mirrorquant-ollama ollama pull llama3:8b
 
 # 删除模型
-docker exec crazytra-ollama ollama rm mistral:7b
+docker exec mirrorquant-ollama ollama rm mistral:7b
 ```
 
 ### LLM 层
@@ -249,25 +249,25 @@ JWT_SECRET=your_random_secret   # JWT 签名密钥
 
 ```bash
 # 备份 Redis
-docker exec crazytra-redis redis-cli SAVE
-docker cp crazytra-redis:/data/dump.rdb ./backup/
+docker exec mirrorquant-redis redis-cli SAVE
+docker cp mirrorquant-redis:/data/dump.rdb ./backup/
 
 # 备份 PostgreSQL
-docker exec crazytra-timescaledb pg_dump -U crazytra crazytra > ./backup/db_backup.sql
+docker exec mirrorquant-timescaledb pg_dump -U mirrorquant mirrorquant > ./backup/db_backup.sql
 
 # 备份所有 volumes
-docker run --rm -v crazytra_timescaledb_data:/data -v $(pwd)/backup:/backup alpine tar czf /backup/timescaledb_backup.tar.gz /data
+docker run --rm -v mirrorquant_timescaledb_data:/data -v $(pwd)/backup:/backup alpine tar czf /backup/timescaledb_backup.tar.gz /data
 ```
 
 ### 恢复
 
 ```bash
 # 恢复 Redis
-docker cp ./backup/dump.rdb crazytra-redis:/data/
-docker restart crazytra-redis
+docker cp ./backup/dump.rdb mirrorquant-redis:/data/
+docker restart mirrorquant-redis
 
 # 恢复 PostgreSQL
-docker exec -i crazytra-timescaledb psql -U crazytra crazytra < ./backup/db_backup.sql
+docker exec -i mirrorquant-timescaledb psql -U mirrorquant mirrorquant < ./backup/db_backup.sql
 ```
 
 ## 监控
@@ -292,7 +292,7 @@ docker-compose logs --tail=100 llm-layer
 docker stats
 
 # 查看特定容器
-docker stats crazytra-nautilus-core
+docker stats mirrorquant-nautilus-core
 ```
 
 ### Grafana 仪表板
@@ -363,10 +363,10 @@ docker-compose logs service-name
 **检查**:
 ```bash
 # 测试 Redis 连接
-docker exec crazytra-redis redis-cli ping
+docker exec mirrorquant-redis redis-cli ping
 
 # 检查网络
-docker network inspect crazytra_crazytra-network
+docker network inspect mirrorquant_mirrorquant-network
 ```
 
 ### 问题：数据库连接失败
@@ -374,7 +374,7 @@ docker network inspect crazytra_crazytra-network
 **检查**:
 ```bash
 # 测试数据库连接
-docker exec crazytra-timescaledb pg_isready -U crazytra
+docker exec mirrorquant-timescaledb pg_isready -U mirrorquant
 
 # 查看数据库日志
 docker-compose logs timescaledb
@@ -385,7 +385,7 @@ docker-compose logs timescaledb
 **解决**:
 ```bash
 # 进入容器
-docker exec -it crazytra-ollama bash
+docker exec -it mirrorquant-ollama bash
 
 # 拉取模型
 ollama pull mistral:7b-instruct-q4_K_M
@@ -530,7 +530,7 @@ SELECT pg_reload_conf();
 ```yaml
 # docker-compose.yml
 networks:
-  crazytra-network:
+  mirrorquant-network:
     driver: bridge
     driver_opts:
       com.docker.network.driver.mtu: 1500

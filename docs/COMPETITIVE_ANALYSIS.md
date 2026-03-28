@@ -465,7 +465,7 @@ Pro: ₹499/月 (~$6)
 
 ---
 
-## Crazytra 的差异化优势
+## MirrorQuant 的差异化优势
 
 ### 1. 技术优势
 
@@ -607,7 +607,7 @@ Enterprise: 定制
 | **TradingView** | 自研 | - | - | - | 图表库 |
 | **3Commas** | React | Ruby | PostgreSQL | Redis | - |
 | **Composer** | React | Python | PostgreSQL | - | 可视化编辑器 |
-| **Crazytra** | React | Rust+Python+Go | TimescaleDB | Redis+Kafka | LLM + 多语言 |
+| **MirrorQuant** | React | Rust+Python+Go | TimescaleDB | Redis+Kafka | LLM + 多语言 |
 
 **你的技术栈更先进**：
 - Rust 数据层（低延迟）

@@ -1,4 +1,4 @@
-module github.com/trading-system/api-gateway
+module api-gateway
 
 go 1.22
 

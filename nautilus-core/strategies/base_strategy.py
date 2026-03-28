@@ -18,9 +18,9 @@ from nautilus_trader.model.identifiers import InstrumentId
 from nautilus_trader.trading.strategy import Strategy, StrategyConfig
 
 
-class CrazytraStrategyConfig(StrategyConfig):
+class MirrorQuantStrategyConfig(StrategyConfig):
     """
-    Crazytra 策略配置基类
+    MirrorQuant 策略配置基类
     
     所有策略参数必须继承此类
     """
@@ -32,14 +32,14 @@ class CrazytraStrategyConfig(StrategyConfig):
     min_confidence: float = 0.3
 
 
-class CrazytraStrategy(Strategy):
+class MirrorQuantStrategy(Strategy):
     """
-    Crazytra 策略基类
+    MirrorQuant 策略基类
     
     扩展 Nautilus Strategy，添加 LLM 权重支持
     """
     
-    def __init__(self, config: CrazytraStrategyConfig | None = None):
+    def __init__(self, config: MirrorQuantStrategyConfig | None = None):
         super().__init__(config)
         
         # LLM 权重存储 {symbol: (score, confidence, metadata)}

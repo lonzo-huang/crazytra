@@ -36,7 +36,7 @@ git push origin main
 ### 1. 在 GitHub 创建仓库
 
 访问 https://github.com/new 创建新仓库：
-- 仓库名: `Crazytra`
+- 仓库名: `MirrorQuant`
 - 描述: `智能自动交易系统 - Nautilus Trader 整合`
 - 可见性: Private（推荐）或 Public
 - **不要**勾选 "Initialize this repository with a README"
@@ -45,7 +45,7 @@ git push origin main
 
 ```bash
 # 添加远程仓库
-git remote add origin https://github.com/your-username/Crazytra.git
+git remote add origin https://github.com/your-username/MirrorQuant.git
 
 # 验证
 git remote -v
@@ -69,7 +69,7 @@ cat ~/.ssh/id_ed25519.pub
 # 在 GitHub Settings > SSH and GPG keys 中添加
 
 # 使用 SSH URL
-git remote set-url origin git@github.com:your-username/Crazytra.git
+git remote set-url origin git@github.com:your-username/MirrorQuant.git
 ```
 
 ## 本次提交内容
@@ -82,7 +82,7 @@ git remote set-url origin git@github.com:your-username/Crazytra.git
 - `nautilus-core/` - 完整的 Nautilus 整合模块
   - `actors/redis_bridge.py` - Nautilus → Redis 桥接
   - `actors/llm_weight_actor.py` - LLM 权重注入
-  - `strategies/base_strategy.py` - CrazytraStrategy 基类
+  - `strategies/base_strategy.py` - MirrorQuantStrategy 基类
   - `strategies/ma_cross_llm.py` - 示例策略（均线+LLM）
   - `main.py` - 主入口
   - `config.py` - Nautilus 配置
@@ -118,7 +118,7 @@ git remote set-url origin git@github.com:your-username/Crazytra.git
 ✅ **Nautilus Trader 1.204.0** - 专业级交易引擎  
 ✅ **RedisBridgeActor** - 确保前端零修改  
 ✅ **LLMWeightActor** - LLM 权重实时注入  
-✅ **CrazytraStrategy** - 支持 LLM 增强的策略基类  
+✅ **MirrorQuantStrategy** - 支持 LLM 增强的策略基类  
 ✅ **完整测试系统** - 6 项自动化验证  
 ✅ **详细文档** - 安装、测试、快速开始  
 
@@ -130,7 +130,7 @@ feat: Nautilus Trader 整合完成
 - 整合 Nautilus Trader 1.204.0 作为核心交易引擎
 - 实现 RedisBridgeActor 桥接 Nautilus 与 Redis
 - 实现 LLMWeightActor 支持 LLM 权重注入
-- 创建 CrazytraStrategy 基类支持 LLM 增强
+- 创建 MirrorQuantStrategy 基类支持 LLM 增强
 - 添加完整的测试验证系统
 - 更新所有文档（ARCHITECTURE.md, INSTALLATION.md, README.md）
 - 保持 Redis Streams 作为外部系统桥接

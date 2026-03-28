@@ -261,7 +261,7 @@ Response:
       "id": "ma-cross-llm",
       "name": "MA Cross with LLM",
       "description": "均线交叉策略 + LLM 情感分析",
-      "author": "Crazytra Team",
+      "author": "MirrorQuant Team",
       "type": "public",
       "price": 0,
       "rating": 4.8,
@@ -372,7 +372,7 @@ func (e *StrategyExecutor) consumeMarketData(streamKey, symbol string) {
 
 ```python
 # 租户自定义策略模板
-from crazytra import Strategy, Signal
+from mirrorquant import Strategy, Signal
 
 class MyCustomStrategy(Strategy):
     """
